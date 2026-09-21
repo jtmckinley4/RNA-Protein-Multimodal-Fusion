@@ -11,14 +11,13 @@ This work is advised by Mina Basirat (postdoc researcher, Prof. Ivan Garibay's l
 ## Repo structure
 
 - `Code/` — the main analysis notebook (`Genomics_MultiModal_Fusion_P1.ipynb`) and supporting datasets.
-- `Claude outputs/` — generated notebook, script, and document drafts.
 - `Notes/` — meeting notes, project notes, and slide decks.
 - `Papers/` — reference papers informing the modeling approach.
 - `Reviews/` — structured reviews and summaries of each reference paper.
 
 ## Current status: Stage 1
 
-`Claude outputs/stage1_pilot.py` runs the first-pass representation analysis:
+`Code/Genomics_MultiModal_Fusion_P1.ipynb` runs the first-pass representation analysis:
 
 1. Validates that every sequence is in frame and starts at a start codon.
 2. Runs linear probes on RNA-only and protein-only embeddings against stability/expression labels.
@@ -35,7 +34,7 @@ Two large data files are intentionally excluded from this repo via `.gitignore` 
 - `Code/mRNA_Stability.csv` (CodonBERT benchmark, ~41,123 sequences)
 - `Code/stage1_main_embeddings.npz` (generated embeddings)
 
-Get `mRNA_Stability.csv` and `mRFP_Expression.csv` from the CodonBERT benchmark repo, place them in `Code/`, and set the correct paths in `stage1_pilot.py`.
+Get `mRNA_Stability.csv` and `mRFP_Expression.csv` from the CodonBERT benchmark repo, place them in `Code/`, and set the correct paths in the notebook's configuration cell.
 
 ## Setup
 
