@@ -1,10 +1,6 @@
 # macOS
 .DS_Store
 
-# Large data files (excluded — share separately, e.g. Google Drive)
-Code/mRNA_Stability.csv
-Code/stage1_main_embeddings.npz
-
 # Python / notebooks
 __pycache__/
 *.pyc
