@@ -10,14 +10,14 @@ This work is advised by Mina Basirat (postdoc researcher, Prof. Ivan Garibay's l
 
 ## Repo structure
 
-- `Code/` — the main analysis notebook (`Genomics_MultiModal_Fusion_P1.ipynb`) and supporting datasets.
+- `Code/` — the main analysis notebook (`Stage1.ipynb`) and supporting datasets.
 - `Notes/` — meeting notes, project notes, and slide decks.
 - `Papers/` — reference papers informing the modeling approach.
 - `Reviews/` — structured reviews and summaries of each reference paper.
 
 ## Current status: Stage 1
 
-`Code/Genomics_MultiModal_Fusion_P1.ipynb` runs the first-pass representation analysis:
+`Code/Stage1.ipynb` runs the first-pass representation analysis:
 
 1. Validates that every sequence is in frame and starts at a start codon.
 2. Runs linear probes on RNA-only and protein-only embeddings against stability/expression labels.
