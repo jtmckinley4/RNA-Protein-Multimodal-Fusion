@@ -1,4 +1,4 @@
-# Genomics Multimodal Fusion
+# RNA-Protein-Multimodal-Fusion
 
 Research pipeline for aligning and fusing separately pretrained DNA, RNA, and protein foundation models, developed as part of an MSDA (AI Track) capstone project at the University of Central Florida.
 
