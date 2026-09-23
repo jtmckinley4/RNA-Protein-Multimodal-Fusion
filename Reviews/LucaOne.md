@@ -56,29 +56,25 @@ Central experiment: a few-shot DNA–protein matching task (4:3:25 train/val/tes
 - No codon-level grouping — nucleotides are individual tokens, so codon structure isn't built into tokenization — our inference.
 - Accuracy degrades with exon count and on species with underrepresented codon usage.
 
-# 8. Relevance to OIL and Our Research
+# 8. Relevance to Our Project
 
-**Direct relevance:** High. LucaOne is the clearest existing precedent for OIL's core requirement — a single model handling both codon-resolvable and raw-nucleotide regions — because it already mixes two token granularities (nucleotide, amino acid) in one vocabulary with a type embedding, rather than fusing separate encoders.
+**Direct relevance:** Low to Medium. LucaOne represents the path this project deliberately does not take: training one joint nucleotide-and-protein model from scratch instead of fusing frozen, separately pretrained encoders. Its value is as a reference point, not a component.
 
-**What can be transferred to OIL?**
-Our inference: the shared-vocabulary-plus-type-embedding pattern generalizes directly to a codon/nucleotide split instead of nucleotide/amino-acid:
+**What can be transferred?**
+Our inference: two uses. First, it frames the project's premise. LucaOne learns cross-modal structure implicitly through shared pretraining at large cost (8 A100 GPUs for 120 days), while our pipeline asks how much of that benefit can be recovered cheaply by fusing existing frozen encoders. Second, if its released checkpoints are usable, it could serve as a "natively joint" comparison encoder: computing CKA between LucaOne's nucleotide and protein embeddings of the same sequences would show how aligned a jointly trained model is, a useful contrast with the 0.128 CKA between our separately trained Nucleotide Transformer and ESM-2.
 
-$$e_i=\mathrm{Emb}(t_i)+\mathrm{TypeEmb}(m_i)+\mathrm{RoPE}(i),\quad m_i\in\{\text{CDS-codon},\,\text{IGS-nucleotide}\}$$
+**What would need to change?** Joint pretraining at this scale is out of scope for the capstone. Using LucaOne only as an embedding source avoids retraining, but its 1.8B-parameter backbone is expensive to run even for inference, and its single-character vocabulary has no codon-level structure, so its embeddings would not line up with our codon-grid fusion without pooling.
 
-with $t_i$ drawn from a vocabulary containing both codon tokens (for CDS) and single-nucleotide tokens (for IGS). RoPE and pre-LN are also reusable as general stability choices.
-
-**What would need to change?** LucaOne mixes single-character tokens only; OIL needs single-nucleotide (IGS) and codon-level (CDS) tokens of different granularities in the same stream, which LucaOne's design doesn't itself address — this needs an explicit boundary marker or length-aware position indexing so RoPE stays meaningful across a resolution change.
-
-**Key architectural takeaway:** For our nucleotide–codon model, the most useful idea from this paper is a single shared model with a mixed vocabulary and a type embedding, extended so the type embedding also signals a token's resolution (codon vs. nucleotide), not just its molecule class.
+**Key architectural takeaway:** The most useful idea from this paper is the contrast it sets up: it defines the costly alternative that our frozen-encoder fusion approach is meant to justify not taking.
 
 # 9. Final Verdict for Literature Review
 
-**Category:** Direct nucleotide–codon modeling; Nucleotide–amino-acid mixed modeling; Multi-resolution modeling; Dataset / corpus paper
-**Priority for our project:** High
-**Reason:** It is the strongest existing precedent for a single joint model over mixed biological token types and directly informs the "single model, mixed vocabulary" architectural option for OIL.
+**Category:** Joint multimodal pretraining; Reference point
+**Priority for our project:** Low
+**Reason:** It is the main alternative to our approach and useful for framing, but nothing from it enters our pipeline directly.
 
 ## Compact Comparison Record
 
-| Input | Tokenization | Backbone | Interaction | Objective | OIL relevance |
-|-.-|---|---|---|---|---|
-| Nucleotides + amino acids, single stream | Shared 39-token character-level vocabulary + token-type embedding | Single 20-layer Transformer, pre-LN, RoPE, 1.8B params | Implicit, via shared self-attention (no explicit fusion module) | 10 joint pretraining tasks (MLM + span/seq/structure) | High direct; High architectural |
+| Input | Tokenization | Backbone | Interaction | Objective | Our relevance |
+|---|---|---|---|---|---|
+| Nucleotides + amino acids, single stream | Shared 39-token character-level vocabulary + token-type embedding | Single 20-layer Transformer, pre-LN, RoPE, 1.8B params | Implicit, via shared self-attention (no explicit fusion module) | 10 joint pretraining tasks (MLM + span/seq/structure) | Low: joint-training alternative we do not take; optional comparison encoder |

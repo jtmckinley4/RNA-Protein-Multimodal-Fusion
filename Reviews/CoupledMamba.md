@@ -52,29 +52,29 @@ Beats prior fusion baselines (cross-attention MulT, tensor-fusion LMF/TFN, other
 - Never tested on biological sequence data — every result is from audio/text/video.
 - The summation coupling (Eq. 6) approximates the full pairwise formulation (Eq. 5), trading expressivity for linear scaling.
 
-# 8. Relevance to OIL and Our Research
+# 8. Relevance to Our Project
 
-**Direct relevance:** Low. Coupled Mamba is not a biological paper and was never evaluated on nucleotide, codon, or amino-acid sequences, but its alignment-free fusion property is architecturally attractive for OIL's CDS/IGS mismatch.
+**Direct relevance:** High as a planned candidate, unproven for biology. Mina asked for Coupled Mamba to be built and benchmarked alongside cross-attention, so it is one of our two primary Stage 3 fusion candidates, even though the paper itself never touches biological sequences.
 
-**What can be transferred to OIL?**
-Our inference: the coupled state-transition mechanism could fuse a codon-resolution CDS stream with a nucleotide-resolution IGS stream without first resampling either onto a shared grid, addressing exactly the alignment problem that BioLangFusion's codon-resampling approach runs into for non-coding regions:
+**What can be transferred?**
+Our inference: the coupled state update maps onto one RNA chain and one protein chain:
 
-$$h_t^{CDS} = S_{CDS}\left(h_{t-1}^{CDS}+h_{t-1}^{IGS}\right)+B_{CDS}x_t^{CDS}$$
+$$h_t^{rna}=S_{rna}\left(h_{t-1}^{rna}+h_{t-1}^{prot}\right)+B_{rna}x_t^{rna},\qquad h_t^{prot}=S_{prot}\left(h_{t-1}^{rna}+h_{t-1}^{prot}\right)+B_{prot}x_t^{prot}$$
 
-with an analogous update for the IGS stream, each running at its own native resolution.
+Two properties fit our Stage 1 findings. It adds no explicit alignment objective (coupling is built into the recurrence), which matches the Stage 2 decision to skip an explicit alignment loss given low alignment and high uniqueness. It also scales linearly in sequence length, compared with cross-attention's quadratic cost, which is the basis for our hypothesis that it can match cross-attention accuracy at lower memory cost.
 
-**What would need to change?** State dimensions $N$ would need to match between the CDS and IGS chains (via projection layers), and the mechanism would need genomics-specific validation — nothing here has been tested on any biological sequence, so this would be a novel application rather than a documented result.
+**What would need to change?** The update sums both chains' states at the same step $t$, so the two streams must share a step index. It needs no alignment loss, but it does need positional correspondence. Nucleotide Transformer emits one token per 6 nucleotides and ESM-2 one per residue, so the streams must first be put on a common grid; because our sequences are coding-only and in frame, BioLangFusion's codon-grid resampling does this exactly. State dimensions must also match, so both encoders' outputs (1,280-dimensional for Nucleotide Transformer, 480 for ESM-2) need projection layers. There are no pretrained checkpoints, the official code targets sentiment benchmarks, and it depends on CUDA kernels (mamba-ssm, causal-conv1d), so it needs GPU access.
 
-**Key architectural takeaway:** For our nucleotide–codon model, the most useful idea from this paper is the alignment-free coupled state-transition mechanism as an alternative to resampling-based fusion, worth prototyping specifically because OIL's IGS regions have no codon grid to resample onto.
+**Key architectural takeaway:** The most useful idea from this paper is a linear-cost fusion with no alignment loss, run on the codon grid, benchmarked head to head against cross-attention.
 
 # 9. Final Verdict for Literature Review
 
-**Category:** Multimodal / multi-encoder architecture; Representation alignment; Other
-**Priority for our project:** Medium
-**Reason:** Not biological and unproven on any genomic task, but its core property — fusing modalities without shared-resolution resampling — directly addresses OIL's hardest alignment problem and is worth a small feasibility test.
+**Category:** State-space fusion architecture
+**Priority for our project:** High
+**Reason:** It is one of Mina's two primary fusion candidates; the work is adapting it to biological sequences, which nothing in the paper has tested.
 
 ## Compact Comparison Record
 
-| Input | Tokenization | Backbone | Interaction | Objective | OIL relevance |
+| Input | Tokenization | Backbone | Interaction | Objective | Our relevance |
 |---|---|---|---|---|---|
-| Audio + text + video continuous features (not biological) | Not applicable (continuous per-timestep features, not tokens) | Per-modality selective SSM (Mamba) chains | Coupled state transition: summed prior states, modality-specific transition matrix | Supervised sentiment regression/classification | Low direct; Medium architectural (alignment-free fusion) |
+| Audio + text + video continuous features (not biological) | Not applicable (continuous per-timestep features, not tokens) | Per-modality selective SSM (Mamba) chains | Coupled state transition: summed prior states, modality-specific transition matrix | Supervised sentiment regression/classification | High: one of Mina's two primary fusion candidates; linear cost, no alignment loss, needs codon-grid inputs |

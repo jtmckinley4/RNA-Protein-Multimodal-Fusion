@@ -53,29 +53,29 @@ Main result: Pearson $r=0.503$ predicting CRISPRi effect sizes on held-out pairs
 - 114 kb DNA window can miss one anchor of a chromatin loop pair, as in the FNDC5 case.
 - Single cell line/dataset with a visible train/validation gap; generalization unproven.
 
-# 8. Relevance to OIL and Our Research
+# 8. Relevance to Our Project
 
-**Direct relevance:** Low–Medium. CDT never operates on raw nucleotide/codon tokens — it fuses pre-computed embeddings at gene/region granularity — so its tokenization choices don't transfer, but its directional-fusion principle is architecturally relevant.
+**Direct relevance:** Medium. CDT uses different encoders (Enformer, scGPT, ESM-C) and a different task (CRISPRi enhancer effects), and it fuses pre-computed gene-level embeddings rather than per-sequence token embeddings. Its value to us is a design idea, directional cross-attention, plus two findings that bear on our Stage 1 results.
 
-**What can be transferred to OIL?**
-Our inference: the one-directional cross-attention pattern maps naturally onto CDS→IGS (or IGS→CDS) information flow if there is a biologically motivated direction to enforce, e.g. regulatory IGS context informing CDS translation:
+**What can be transferred?**
+Our inference: with only RNA and protein, the one-directional pattern reduces to a single translation-direction cross-attention, where each protein residue queries the RNA positions:
 
-$$\text{IGS}\to\text{CDS}:\ Q=\text{codon positions},\ K,V=\text{IGS nucleotide positions}$$
+$$\text{RNA}\to\text{Protein}:\ Q=\text{protein residues},\ K,V=\text{RNA codon positions}\ \Rightarrow\ \text{attn}\in\mathbb{R}^{T/3\times T/3}$$
 
-The Virtual-Cell-Embedder-style attention pooling is also a reusable way to compress a variable-length stream into a fixed summary before fusing with the other stream.
+Because our data is coding-only, both axes sit on the same codon grid, so each attention weight reads directly as "how much this codon informs this residue." That makes it an interpretable variant of the Isoformer-style cross-attention candidate. Two findings also carry over. First, the CDT-III sequel reports that RNA and protein changes often move in opposite directions (66.7 percent of genes with observable mRNA changes), which supports our Stage 1 reading of high uniqueness between these modalities. Second, CDT's attention and gradient attributions overlapped only about 10 percent, which suggests gradient-based attribution as a follow-up to our Track C attention-motif test, since attention alone may not be the right tool for locating what the encoder uses.
 
-**What would need to change?** CDT assumes frozen, pre-computed, gene/region-level embeddings rather than raw token sequences; adapting it to OIL would require operating directly on codon/nucleotide token embeddings within a single trainable model instead of caching external foundation-model outputs, and defining what "direction" of causality (if any) applies between CDS and IGS.
+**What would need to change?** CDT's direction is built for DNA to RNA to protein over large genomic windows; for our two-modality, coding-only setting the only natural direction is RNA to protein. Enforcing one direction also discards whatever protein-to-RNA information a bidirectional model keeps, so it belongs as a variant tested against bidirectional cross-attention, not as a replacement.
 
-**Key architectural takeaway:** For our nucleotide–codon model, the most useful idea from this paper is enforcing a directional (rather than symmetric) cross-attention between representation types when there is a plausible causal or regulatory direction to encode, trading some flexibility for interpretability.
+**Key architectural takeaway:** The most useful idea from this paper is one-way RNA-to-protein cross-attention as an interpretable Stage 3 variant, with gradient attribution as a Track C follow-up.
 
 # 9. Final Verdict for Literature Review
 
-**Category:** Genomic-context modeling; Representation alignment; Multimodal / multi-encoder architecture
+**Category:** Directional cross-attention; Interpretability
 **Priority for our project:** Medium
-**Reason:** The directional-attention idea and its interpretability case study are conceptually valuable, but the paper's reliance on pre-computed gene-level embeddings limits direct architectural reuse for raw codon/nucleotide sequences.
+**Reason:** It offers an interpretable fusion variant and evidence for RNA-protein uniqueness, but its encoders, task, and gene-level embeddings limit direct reuse.
 
 ## Compact Comparison Record
 
-| Input | Tokenization | Backbone | Interaction | Objective | OIL relevance |
+| Input | Tokenization | Backbone | Interaction | Objective | Our relevance |
 |---|---|---|---|---|---|
-| Frozen DNA (Enformer bins) + RNA (scGPT gene tokens) + protein (ESM-C) embeddings | Not raw-tokenized; pre-computed per-modality embeddings | Self-attention per modality + directional cross-attention + VCE pooling | One-directional DNA→RNA→protein cross-attention | Huber-loss regression on CRISPRi effect size | Low direct; Medium architectural (directional fusion pattern) |
+| Frozen DNA (Enformer bins) + RNA (scGPT gene tokens) + protein (ESM-C) embeddings | Not raw-tokenized; pre-computed per-modality embeddings | Self-attention per modality + directional cross-attention + VCE pooling | One-directional DNA→RNA→protein cross-attention | Huber-loss regression on CRISPRi effect size | Medium: interpretable one-way RNA-to-protein cross-attention variant; evidence for RNA-protein uniqueness |

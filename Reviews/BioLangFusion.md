@@ -59,29 +59,35 @@ Five tasks: CoV-Vac, Fungal, E. coli expression, mRNA stability, Ab1 (Table with
 - Codon-grid alignment assumes a clean reading frame throughout; no mechanism for non-coding regions.
 - Separate frozen encoders cannot interact during pretraining, limiting deep cross-modal learning.
 
-# 8. Relevance to OIL and Our Research
+# 8. Relevance to Our Project
 
-**Direct relevance:** Medium. BioLangFusion's fusion mechanisms transfer directly to OIL's CDS regions, which are already codon-resolved, but the paper's alignment method assumes every position maps to a codon — a condition OIL's intergenic sequences do not satisfy.
+**Direct relevance:** High. BioLangFusion is the closest existing precedent for this project: it fuses frozen Nucleotide Transformer and ESM-2 embeddings (plus RNA-FM) for molecular property prediction, and mRNA stability is one of its five benchmark tasks. Our mRNA_Stability sequences are coding-only, start at a start codon, and stay in frame, which is exactly the setting where its codon-resolution alignment holds at every position.
 
-**What can be transferred to OIL?**
-Our inference: the entropy-regularized attention-pooling head could fuse a CDS codon-resolution stream with an IGS nucleotide-resolution stream:
+**What can be transferred?**
+Our inference: three pieces map directly onto the RNA and protein streams we already embed.
 
-$$h_{fused}=\sum_m \alpha_m \cdot \mathrm{Proj}_m(\tilde{E}_m),\quad \alpha=\mathrm{softmax}(\text{gated attention})$$
+1. The concatenation baseline becomes our Stage 3 concatenation-plus-MLP baseline, the model every fusion candidate must beat. Stage 1's linear version already shows no gain (0.100 versus 0.103 for protein alone), so this is the bar a learned fusion module has to clear.
+2. Codon-resolution resampling puts both streams on one grid. Nucleotide Transformer's 6-mer tokens cover two codons each, so the RNA stream is upsampled onto ESM-2's one-token-per-residue grid:
 
-Cross-modal multi-head attention (method 3) is likewise reusable between a codon encoder and a nucleotide encoder.
+$$\tilde{E}_{RNA}=\mathrm{TConv}_{k=2,s=2}(E_{RNA})\in\mathbb{R}^{T/3\times d_{RNA}},\qquad E_{Prot}\in\mathbb{R}^{T/3\times d_{Prot}}$$
 
-**What would need to change?** The fixed 3:1/6:1 resampling ratio assumes codon structure everywhere; IGS has none, so alignment needs a boundary/type indicator marking CDS vs. IGS spans instead of uniform resampling.
+Position $t$ then refers to the same codon in both streams, which is what per-position fusion (and Coupled Mamba's step-matched recurrence) needs.
+3. The entropy-regularized MIL head produces one weight per modality per sequence, a direct, interpretable readout of how much the model leans on protein versus RNA. That is a useful check given Stage 1 found protein carries most of the stability signal (0.103 versus 0.015 for RNA).
 
-**Key architectural takeaway:** For our nucleotide–codon model, the most useful idea from this paper is the entropy-regularized attention-pooling fusion head, adapted to fuse a codon-resolution CDS stream with a nucleotide-resolution IGS stream once a boundary-aware alignment (rather than uniform resampling) is defined.
+Its reported mRNA-stability scores are also an external comparison point for Stage 4.
+
+**What would need to change?** Stage 1 used one mean-pooled vector per sequence; per-codon fusion needs the encoders' token-level outputs, so the embedding step must keep full hidden-state sequences. Resampling is also only a positional alignment, not a representational one. Our Stage 2 decision tree reserves resampling-only alignment for the high-alignment, redundancy-dominated case, and Stage 1 places this pair at low alignment and high uniqueness, so resampling alone is not expected to explain any fusion gain.
+
+**Key architectural takeaway:** The most useful ideas from this paper are the codon-grid resampling (exact for our coding-only data) and the concatenation baseline, with the MIL modality weights as a cheap interpretability check on which encoder the fused model relies on.
 
 # 9. Final Verdict for Literature Review
 
-**Category:** Direct nucleotide–codon modeling; Multimodal / multi-encoder architecture; Representation alignment
+**Category:** Multimodal fusion of frozen encoders; Representation alignment
 **Priority for our project:** High
-**Reason:** It is the most directly analogous fusion-of-frozen-encoders approach to OIL's CDS+IGS setting, and its ablations give concrete evidence for what alignment choices matter.
+**Reason:** Same encoder families, same task family, and it supplies our Stage 3 baseline, a codon-grid alignment that fits our coding-only data exactly, and an external Stage 4 comparison.
 
 ## Compact Comparison Record
 
-| Input | Tokenization | Backbone | Interaction | Objective | OIL relevance |
+| Input | Tokenization | Backbone | Interaction | Objective | Our relevance |
 |---|---|---|---|---|---|
-| DNA (6-mer) + mRNA (nt) + protein (aa/codon) | Separate pretrained tokenizers per modality | 3 frozen pretrained Transformers + fusion head + TextCNN | Codon-grid resampling then concat / MIL-attention / cross-attention | Downstream supervised loss + entropy regularizer (MIL) | Medium direct; High architectural (fusion head reusable)|
+| DNA (6-mer) + mRNA (nt) + protein (aa/codon) | Separate pretrained tokenizers per modality | 3 frozen pretrained Transformers + fusion head + TextCNN | Codon-grid resampling then concat / MIL-attention / cross-attention | Downstream supervised loss + entropy regularizer (MIL) | High: same encoders and task family; concatenation baseline, codon-grid resampling, external stability benchmark |

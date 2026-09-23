@@ -52,29 +52,29 @@ Modality-ablated variants using Nucleotide Transformer for DNA and RNA (Table 2)
 - Modality-centered embeddings require running all three encoders even for single-modality-adjacent tasks.
 - No evaluation on sequences mixing nucleotide and codon resolution within one input stream.
 
-# 8. Relevance to OIL and Our Research
+# 8. Relevance to Our Project
 
-**Direct relevance:** Medium. IsoFormer's cross-attention fusion of separately encoded, differently-tokenized streams is architecturally close to fusing a CDS (codon) stream with an IGS (nucleotide) stream, but the paper never resamples or aligns positions across modalities the way OIL's CDS/IGS boundary would require.
+**Direct relevance:** High. IsoFormer is the source of one of the two fusion candidates Mina asked for: cross-attention over frozen pretrained encoders, using Nucleotide Transformer and ESM-2, the same encoder families as our pipeline. It is also the source of the encoder-reinitialization ablation we plan to use to prove the fused model uses both modalities.
 
-**What can be transferred to OIL?**
-Our inference: the successive cross-attention aggregation function is directly adaptable — replace DNA/RNA/protein with CDS(codon)/IGS(nucleotide) streams:
+**What can be transferred?**
+Our inference: the aggregation function reduces cleanly from three modalities to our two:
 
-$$h'_{CDS}=f_\phi^{agg}(h_{CDS},h_{IGS}),\quad h'_{IGS}=f_\phi^{agg}(h_{IGS},h_{CDS}),\quad h_{multi}=[h'_{CDS},h'_{IGS}]$$
+$$h'_{rna}=f_\phi^{agg}(h_{rna},h_{prot}),\qquad h'_{prot}=f_\phi^{agg}(h_{prot},h_{rna}),\qquad h_{multi}=[h'_{rna},h'_{prot}]$$
 
-The graceful-degradation property (zeroing a missing modality's cross-attention term) is also useful for sequence regions where one representation is absent.
+followed by a linear head regressing mRNA stability. The reinitialization ablation (their Table 5) transfers as is: reinitialize one encoder, retrain, and confirm the score drops. That check matters here because Stage 1 shows protein alone carries most of the signal (0.103 versus 0.015 for RNA), so a fused model could score well while ignoring RNA entirely. Graceful degradation when a modality is missing also keeps DNA addable later without redesign.
 
-**What would need to change?** IsoFormer never forces a shared sequence length across modalities; for OIL, CDS and IGS regions occur within a single genome rather than as parallel whole-sequence views, so the fusion would need to operate at the level of alternating spans rather than two full-sequence encoder outputs fused once per example.
+**What would need to change?** IsoFormer fine-tunes the encoders together with the aggregator; our plan keeps both encoders frozen and trains only the fusion module and head, which is cheaper but may give up some of the gain they attribute to end-to-end training. Their training set (about 170,000 transcripts) is far larger than our 981-sequence pilot, so cross-attention needs the scaled-up Stage 3 training set. Their RNA inputs include UTRs and splicing context; ours are coding-only, so the RNA-specific signal available to cross-attention is narrower. Notably, RNA outperformed protein alone in their task ($R^2$ 0.36 versus 0.20), the reverse of our Stage 1 stability result.
 
-**Key architectural takeaway:** For our nucleotide–codon model, the most useful idea from this paper is the successive cross-attention-with-residual aggregation pattern, adapted to fuse span-local CDS and IGS representations rather than two whole-sequence modality embeddings.
+**Key architectural takeaway:** The most useful ideas from this paper are bidirectional cross-attention between token-level Nucleotide Transformer and ESM-2 outputs, our primary Stage 3 candidate, and the reinitialization ablation that tests whether the fused model actually uses both inputs.
 
 # 9. Final Verdict for Literature Review
 
-**Category:** Multimodal / multi-encoder architecture; Nucleotide–amino-acid mixed modeling; Genomic-context modeling
+**Category:** Multimodal fusion of frozen encoders; Cross-attention architecture
 **Priority for our project:** High
-**Reason:** Its cross-attention aggregation is the clearest, best-ablated fusion mechanism among the frozen-encoder papers and directly suggests a fusion layer for CDS/IGS streams, though positional alignment is not addressed.
+**Reason:** It defines one of Mina's two primary fusion candidates, uses the same encoder families as our pipeline, and provides the ablation we need to verify genuine cross-modal use.
 
 ## Compact Comparison Record
 
-| Input | Tokenization | Backbone | Interaction | Objective | OIL relevance |
+| Input | Tokenization | Backbone | Interaction | Objective | Our relevance |
 |---|---|---|---|---|---|
-| DNA + RNA + protein sequences | Enformer (1-nt) / NT v2 (6-nt) DNA & RNA, ESM-2 (1-aa) protein | 3 frozen pretrained Transformer encoders + cross-attention aggregator | Successive cross-attention with residual connections, per modality | End-to-end MSE regression on isoform expression | Medium direct; High architectural (fusion pattern reusable) |
+| DNA + RNA + protein sequences | Enformer (1-nt) / NT v2 (6-nt) DNA & RNA, ESM-2 (1-aa) protein | 3 frozen pretrained Transformer encoders + cross-attention aggregator | Successive cross-attention with residual connections, per modality | End-to-end MSE regression on isoform expression | High: one of Mina's two primary fusion candidates, plus the encoder-reinitialization ablation |
