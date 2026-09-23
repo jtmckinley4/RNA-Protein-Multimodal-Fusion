@@ -11,3 +11,6 @@ __pycache__/
 
 # Claude app output mirror
 Claude outputs/
+
+# model cache
+.model-cache/
