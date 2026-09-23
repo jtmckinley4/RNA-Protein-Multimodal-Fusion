@@ -8,3 +8,6 @@ __pycache__/
 
 # Office lock files
 **/~$*
+
+# Claude app output mirror
+Claude outputs/
