@@ -34,7 +34,9 @@ Heading levels express containment, not a preferred font size. Establish the doc
 
 Choose the parent first and descend one level; do not skip levels to obtain a visual size. The same topic can be a title in its own file and a subdivision in a larger notebook. Additional depths follow the same containment rule only when the content has another actual grouping. Paragraph length alone does not justify a new heading.
 
-Use a bold label when introducing a notation key, example, interpretation, or implementation connection within one explanation. Use a heading when introducing a different question or operation that readers should be able to find in the outline. Do not use bold paragraphs as substitutes for missing section headings.
+Use a bold label when introducing a notation key, example, interpretation, or implementation connection within one explanation. Within one procedure or calculation, distinguish dependent intermediate operations with ordered steps or bold numbered labels. A new equation or operation alone does not justify a heading. Keep or add a heading when it identifies a distinct analysis or reference topic, or when the requested outline or an existing incoming link establishes a separate navigation target. Do not flatten useful headings merely because their topics depend on one another.
+
+A heading's scope extends through the following content until the next heading of the same or a higher level, including across notebook cells. Check that subsequent explanation, examples, code, and outputs belong under it. A new cell or horizontal rule does not close that scope. Avoid a narrow heading that incorrectly places a whole procedure's example or implementation beneath only its final step.
 
 ## Use explicit layout rules
 

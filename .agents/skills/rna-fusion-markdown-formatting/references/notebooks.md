@@ -12,6 +12,8 @@ A reading dependency is information needed to understand the next explanation or
 
 Use the core heading definitions across the entire notebook, not separately inside each cell. For example, the current representation-analysis grouping is `## Representation analysis`, then `### Track A: Decodability`, then `#### Sequence-length baseline`. The baseline's notation and interpretation are local labels within that analysis. These examples identify nesting; they do not require every notebook to have these tracks.
 
+For chained calculations within one analysis, apply the core skill's distinction between local steps and navigation topics. For example, centroid, per-row distance, and mean distance are steps of one spread calculation; numbered local labels keep its example and implementation under the same analysis. A reference organized to look up those concepts separately can retain their headings and incoming links.
+
 ## Place separators and Markdown cell boundaries
 
 Use a horizontal rule when the outline changes between workflow phases or analysis families. In the Stage 1 notebook, such changes include setup to reusable helper definitions, definitions to running the embedding pipeline, producing embeddings to analyzing them, and decodability to cross-modal geometry. Moving from sequence-length prediction to GC-content prediction stays within one family and does not require a rule.
