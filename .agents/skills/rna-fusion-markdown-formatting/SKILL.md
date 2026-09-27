@@ -18,7 +18,7 @@ Read the requested file and the surrounding material before editing. Identify th
 | Repository instructions and skill prose | Apply the common Markdown rules, preserving functional metadata, imports, paths, and examples. Formatting alone does not authorize changing triggers, scope, or behavior. |
 | Executable code | Outside this skill. Code may be read to understand an explanation; code formatting and implementation are separate work. No external coding skill is a prerequisite. |
 
-Individual material in `Reviews/` and personal notes in `Notes/` keeps its author's format and voice. Follow a specific request concerning that material without extending these shared conventions to it by default. For document purpose, tone, attribution, or retaining research sources, use the repository's [shared-documentation workflow](../rna-fusion-shared-documentation/SKILL.md); a small formatting correction needs only the applicable presentation rules.
+Individual material in `Notes/Reviews/` and personal notes in `Notes/` keeps its author's format and voice. Follow a specific request concerning that material without extending these shared conventions to it by default. For document purpose, tone, attribution, or retaining research sources, use the repository's [shared-documentation workflow](../rna-fusion-shared-documentation/SKILL.md); a small formatting correction needs only the applicable presentation rules.
 
 ## Define the outline before choosing heading levels
 

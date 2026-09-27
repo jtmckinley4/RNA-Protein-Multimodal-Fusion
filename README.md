@@ -23,12 +23,12 @@ Coupled Mamba's priority was agreed at the September 23, 2026 online meeting. Th
 | Location | Contents |
 | --- | --- |
 | [Code/](Code/) | Analysis notebooks and input datasets; local runs also produce intermediate outputs here. |
-| [docs/](docs/README.md) | Shared explanations and reading routes connecting biology, methods, and evidence to the notebook. |
-| [Reviews/](Reviews/) | Individual paper reviews and interpretations, organized by contributor. |
-| [Notes/](Notes/) | Meeting notes, project planning, and slide decks. |
+| [docs/](docs/README.md) | Team research plans, bibliography, and shared explanations connecting biology, methods, and evidence to the notebook. |
+| [Notes/Reviews/](Notes/Reviews/) | Individual paper reviews and interpretations, organized by contributor. |
+| [Notes/](Notes/) | Working notes, meeting records, and discussion slides. |
 | [Papers/](Papers/) | Reference papers informing the research. |
 
-Keep individual paper notes in contributor folders, such as [Reviews/Julian/](Reviews/Julian/) and `Reviews/Chase/`, so interpretations remain attributable. Obsidian supports personal study; explanations needed to understand the project belong in the shared documentation.
+Keep individual paper notes in contributor folders, such as [Notes/Reviews/Julian/](Notes/Reviews/Julian/) and `Notes/Reviews/Chase/`, so interpretations remain attributable. Obsidian supports personal study; explanations needed to understand the project belong in the shared documentation.
 
 Agents working in this repository should start with [AGENTS.md](AGENTS.md).
 

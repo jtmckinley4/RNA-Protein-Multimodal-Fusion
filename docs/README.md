@@ -1,6 +1,6 @@
 # Research documentation
 
-This directory provides a central place to connect the biological questions, analyses, and evidence behind the RNA–protein fusion notebook. It supports code development, experiment planning, and manuscript writing in Overleaf.
+This directory brings together the team's maintained research plans, bibliography, and explanations connecting biological questions, analyses, and evidence behind the RNA–protein fusion notebook. It supports code development, experiment planning, and manuscript writing in Overleaf.
 
 ## Find relevant material
 
@@ -8,10 +8,13 @@ Use the following starting points to connect a research question to the analysis
 
 | Question | Starting point |
 | --- | --- |
+| What are we proposing to investigate? | The [Research Canvas](Research_Canvas.pptx). |
+| What is the project schedule? | The [Gantt presentation](Research_Project_Plan_Gantt.pptx) and [editable Gantt workbook](Research_Project_Plan_Gantt.xlsx). |
+| Where is the annotated bibliography? | The [team bibliography](Annotated_Bibliography.docx). |
 | What biological question motivates the analysis? | The [project overview](../README.md) and the introduction to [Stage1_refactor.ipynb](../Code/Stage1_refactor.ipynb). |
 | What do the sequences and labels represent? | The [dataset overview](../README.md#data), [mRNA stability data](../Code/mRNA_Stability.csv), and the notebook's loading and preprocessing sections. Check what a row and its label mean, how the label was obtained, and which examples enter the analysis. |
 | Which readings are worth returning to? | [Selected sources and readings](sources.md), with reasons to retain them and the scope of what was read. |
-| Why use this method? | Julian's [BioLangFusion review](../Reviews/Julian/BioLangFusion.md) and [alignment paper review](../Reviews/Julian/Alignment_Theory_Paper_Review.md), read alongside the corresponding [papers](../Papers/). |
+| Why use this method? | Julian's [BioLangFusion review](../Notes/Reviews/Julian/BioLangFusion.md) and [alignment paper review](../Notes/Reviews/Julian/Alignment_Theory_Paper_Review.md), read alongside the corresponding [papers](../Papers/). |
 | How is the method implemented? | The relevant sections of [Stage1_refactor.ipynb](../Code/Stage1_refactor.ipynb) and [Stage1.ipynb](../Code/Stage1.ipynb). Identify the notebook and version associated with the result being discussed. |
 | What does the result establish? | Its producing notebook cells, outputs, baselines, evaluation split, and interpretation. Check whether the evidence supports the claim and retain unresolved discrepancies between versions. |
 
