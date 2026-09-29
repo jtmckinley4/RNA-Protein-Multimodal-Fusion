@@ -34,7 +34,7 @@ Agents working in this repository should start with [AGENTS.md](AGENTS.md).
 
 ## Stage 1 analysis
 
-[Stage1.ipynb](Code/Stage1.ipynb) contains the original representation analysis. [Stage1_refactor.ipynb](Code/Stage1_refactor.ipynb) is a developing refactor with expanded explanations. Keep results associated with the notebook and version that produced them.
+[Stage1.ipynb](Code/Stage1.ipynb) contains the original representation analysis. [Stage1_refactor.ipynb](Code/Stage1_refactor.ipynb) is a developing refactor with expanded explanations. The refactor's final section, Multi-encoder extension, repeats the analysis on the same sample for several DNA, RNA, and protein encoders; that section has not yet been run with the real checkpoints. Keep results associated with the notebook and version that produced them.
 
 The notebooks contain analyses that:
 
@@ -57,7 +57,7 @@ The next Stage 1 work adds the DNA modality and more than one encoder per modali
 
 In Setting A all three inputs derive from one coding sequence, so differences between encoders come from pretraining corpora and tokenization rather than new biological information. The stability CSV has no gene or transcript identifiers, so genomic context around each gene is not available without a separate mapping step. Setting B supplies DNA that carries promoter and regulatory context absent from the protein.
 
-The planned analysis embeds every sequence with each encoder, then computes decodability probes per encoder; CKA, mutual k-NN, RSA with a permutation test, and held-out CCA with retrieval for every encoder pair, including pairs within one modality; the same comparisons after regressing out sequence composition; and synergy for pairs and triples. Candidate encoders are Nucleotide Transformer (500M human-ref and v2 100M multi-species) and DNABERT-2 for DNA; RNA-FM, an mRNA-trained model such as CodonBERT, and Nucleotide Transformer as an RNA encoder; and ESM-2 at 8M, 35M, and 150M for protein. Starred entries in the Overleaf plan's encoder table match the checkpoints used by BioLangFusion and IsoFormer.
+The Multi-encoder extension section of [Stage1_refactor.ipynb](Code/Stage1_refactor.ipynb) implements Setting A. It embeds every sequence with each encoder, then computes decodability probes per encoder; CKA, mutual k-NN, RSA with a permutation test, and held-out CCA with retrieval for every encoder pair, including pairs within one modality; the same comparisons after regressing out sequence composition; and synergy for pairs and triples. Candidate encoders are Nucleotide Transformer (500M human-ref and v2 100M multi-species) and DNABERT-2 for DNA; RNA-FM, an mRNA-trained model such as CodonBERT, and Nucleotide Transformer as an RNA encoder; and ESM-2 at 8M, 35M, and 150M for protein. Starred entries in the Overleaf plan's encoder table match the checkpoints used by BioLangFusion and IsoFormer.
 
 ## Data
 
@@ -85,6 +85,8 @@ When code adds or changes an output, update this inventory and its handling. Add
 
 | Generated file | Producer | Purpose | Handling |
 | --- | --- | --- | --- |
+| `Code/stage1_multi_encoder_cache/*.npz` | `Stage1_refactor.ipynb`, Multi-encoder extension | Per-encoder embeddings of the main sample and the mRFP control for encoders other than the two Stage 1 encoders; file names include a hash of the inputs, checkpoint, and token limit. | Local and ignored; delete to force re-embedding. |
+| `Code/stage1_multi_encoder_results/` | `Stage1_refactor.ipynb`, Multi-encoder extension | Small CSV tables (encoder status, probes, pairwise alignment with and without composition control, synergy, control spread) and `run_info.json` with package versions and device. | Not ignored; commit a run's folder deliberately when its results are reported. |
 | `Code/stage1_main_embeddings.npz` | `Stage1.ipynb` and `Stage1_refactor.ipynb` | Snapshot of nucleotide (DNA-model) embeddings, stored under the key `rna`, protein embeddings, and labels; subsequent analyses use the in-memory arrays. | Local and ignored; either notebook overwrites the same path. |
 
 ## Setup
@@ -101,7 +103,9 @@ Open notebooks with VS Code's Python and Jupyter extensions and [select the envi
 
 The notebooks use CUDA when available and otherwise run on CPU. The first run downloads `InstaDeepAI/nucleotide-transformer-500m-human-ref` and `facebook/esm2_t12_35M_UR50D`, unless they are already cached. Hugging Face normally stores these downloads in the [user's cache](https://huggingface.co/docs/transformers/installation#cache-directory); the notebooks do not configure the repository's `.model-cache/` directory.
 
-This dependency list covers the imports in both notebooks. A fresh-environment run has not been verified, and the repository does not yet pin package versions or model revisions for reproducibility.
+The Multi-encoder extension section of [Stage1_refactor.ipynb](Code/Stage1_refactor.ipynb) also needs `multimolecule` for the RNA encoders and `einops` for DNABERT-2. `multimolecule` 0.2.1 imports with `transformers` 5.14.1 and 5.15.1 but not 5.16 or later, so install `python -m pip install "transformers==5.15.1" multimolecule einops` before running that section. Its encoders are downloaded from Hugging Face on first use; a checkpoint that fails to load is recorded in the section's status table and skipped.
+
+This dependency list covers the imports in the Stage 1 notebooks. A fresh-environment run has not been verified, and the repository does not yet pin package versions or model revisions for reproducibility.
 
 ### Viewing project files in VS Code
 
