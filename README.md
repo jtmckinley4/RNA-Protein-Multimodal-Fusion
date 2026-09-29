@@ -6,7 +6,7 @@ A research project in the [Complex Adaptive Systems Laboratory](https://complexi
 
 The aim is to develop methods for choosing which biological modalities and pretrained models to combine, and for deciding when and how fusion is useful for a target task. The longer-term goal set with Mina Basirat is to fuse several pretrained encoders, with more than one model per modality (for example, several DNA, RNA, and protein models), and to compare those combinations. Those choices should be grounded in the biological question and the wet-lab work the predictions could inform. The [meeting slides](Notes/Mina_Meeting_Slides_2026-09-23.pptx), particularly slide 3, frame the contribution as a method for deciding whether and how to fuse.
 
-The current investigation uses frozen Nucleotide Transformer and ESM-2 encoders to study nucleotide and translated protein representations, beginning with mRNA stability prediction and a synonymous-recoding control. Frozen means that the encoder weights are not updated during these analyses. The Nucleotide Transformer checkpoint used so far (`nucleotide-transformer-500m-human-ref`) was pretrained on the human reference genome, so it is a DNA language model reading the coding sequence in DNA letters; Stage 1 has therefore compared a DNA-model representation with a protein-model representation. The notebooks' `rna_*` variable names refer to this nucleotide branch. This is an initial case study within the broader methodology; the choice of future tasks, model combinations, and evaluation criteria remains part of the research.
+The current investigation uses one frozen encoder per modality to study DNA, RNA, and translated protein representations, beginning with mRNA stability prediction and a synonymous-recoding control. Frozen means that the encoder weights are not updated during these analyses. In [Stage1_refactor.ipynb](Code/Stage1_refactor.ipynb), Nucleotide Transformer 500M human-ref (pretrained on the human reference genome) reads each coding sequence in DNA letters, RNA-FM (pretrained on non-coding RNA) reads the same sequence in RNA letters, and ESM-2 35M reads its translation. The original [Stage1.ipynb](Code/Stage1.ipynb) compares only the Nucleotide Transformer and ESM-2 branches, and its `rna_*` variable names refer to the Nucleotide Transformer branch. This is an initial case study within the broader methodology; the choice of future tasks, model combinations, and evaluation criteria remains part of the research.
 
 ### Architecture priorities
 
@@ -34,15 +34,15 @@ Agents working in this repository should start with [AGENTS.md](AGENTS.md).
 
 ## Stage 1 analysis
 
-[Stage1.ipynb](Code/Stage1.ipynb) contains the original representation analysis. [Stage1_refactor.ipynb](Code/Stage1_refactor.ipynb) is a developing refactor with expanded explanations. The refactor's final section, Multi-encoder extension, repeats the analysis on the same sample for several DNA, RNA, and protein encoders; that section has not yet been run with the real checkpoints. Keep results associated with the notebook and version that produced them.
+[Stage1.ipynb](Code/Stage1.ipynb) contains the original representation analysis. [Stage1_refactor.ipynb](Code/Stage1_refactor.ipynb) is a developing refactor with expanded explanations that runs every track on DNA, RNA, and protein embeddings and compares the three modality pairs. The refactor's final section, Multi-encoder extension, repeats the analysis on the same sample for several DNA, RNA, and protein encoders; the three-modality refactor has not yet been run with the real checkpoints. Keep results associated with the notebook and version that produced them.
 
 The notebooks contain analyses that:
 
-1. Check sequence length and start codons, translate nucleotide sequences, and generate paired embeddings.
+1. Check sequence length and start codons, translate nucleotide sequences, and generate matched DNA, RNA, and protein embeddings.
 2. Probe prediction from each representation separately and from concatenated embeddings, with sequence-feature controls.
 3. Compare representation geometry using linear CKA and additional neighborhood, correlation, and retrieval diagnostics; visualize embeddings with UMAP.
 4. Examine the mRFP expression dataset as a synonymous-recoding control.
-5. Explore nucleotide attention, candidate sequence patterns, and relationships between representation similarity and prediction error.
+5. Explore DNA-encoder and RNA-encoder attention, candidate sequence patterns, and relationships between representation similarity and prediction error.
 
 The concatenated-embedding probe uses a linear model, distinct from the concatenation + MLP reference baseline. These analyses can inform experiment design; their outputs alone do not establish which fusion method to use or validate a wet-lab application.
 
@@ -57,7 +57,7 @@ The next Stage 1 work adds the DNA modality and more than one encoder per modali
 
 In Setting A all three inputs derive from one coding sequence, so differences between encoders come from pretraining corpora and tokenization rather than new biological information. The stability CSV has no gene or transcript identifiers, so genomic context around each gene is not available without a separate mapping step. Setting B supplies DNA that carries promoter and regulatory context absent from the protein.
 
-The Multi-encoder extension section of [Stage1_refactor.ipynb](Code/Stage1_refactor.ipynb) implements Setting A. It embeds every sequence with each encoder, then computes decodability probes per encoder; CKA, mutual k-NN, RSA with a permutation test, and held-out CCA with retrieval for every encoder pair, including pairs within one modality; the same comparisons after regressing out sequence composition; and synergy for pairs and triples. Candidate encoders are Nucleotide Transformer (500M human-ref and v2 100M multi-species) and DNABERT-2 for DNA; RNA-FM, an mRNA-trained model such as CodonBERT, and Nucleotide Transformer as an RNA encoder; and ESM-2 at 8M, 35M, and 150M for protein. Starred entries in the Overleaf plan's encoder table match the checkpoints used by BioLangFusion and IsoFormer.
+The Multi-encoder extension section of [Stage1_refactor.ipynb](Code/Stage1_refactor.ipynb) implements Setting A. It embeds every sequence with each encoder, then computes decodability probes per encoder; CKA, mutual k-NN, RSA with a permutation test, and held-out CCA with retrieval for every encoder pair, including pairs within one modality; the same comparisons after regressing out sequence composition; and synergy for pairs and triples. Candidate encoders are Nucleotide Transformer (500M human-ref and v2 100M multi-species) and DNABERT-2 for DNA; RNA-FM and mRNA-FM for RNA; and ESM-2 at 8M, 35M, and 150M for protein. Starred entries in the Overleaf plan's encoder table match the checkpoints used by BioLangFusion and IsoFormer.
 
 ## Data
 
@@ -87,7 +87,7 @@ When code adds or changes an output, update this inventory and its handling. Add
 | --- | --- | --- | --- |
 | `Code/stage1_multi_encoder_cache/*.npz` | `Stage1_refactor.ipynb`, Multi-encoder extension | Per-encoder embeddings of the main sample and the mRFP control for encoders other than the two Stage 1 encoders; file names include a hash of the inputs, checkpoint, and token limit. | Local and ignored; delete to force re-embedding. |
 | `Code/stage1_multi_encoder_results/` | `Stage1_refactor.ipynb`, Multi-encoder extension | Small CSV tables (encoder status, probes, pairwise alignment with and without composition control, synergy, control spread) and `run_info.json` with package versions and device. | Not ignored; commit a run's folder deliberately when its results are reported. |
-| `Code/stage1_main_embeddings.npz` | `Stage1.ipynb` and `Stage1_refactor.ipynb` | Snapshot of nucleotide (DNA-model) embeddings, stored under the key `rna`, protein embeddings, and labels; subsequent analyses use the in-memory arrays. | Local and ignored; either notebook overwrites the same path. |
+| `Code/stage1_main_embeddings.npz` | `Stage1.ipynb` and `Stage1_refactor.ipynb` | Snapshot of embeddings and labels; subsequent analyses use the in-memory arrays. `Stage1_refactor.ipynb` stores the keys `dna`, `rna` (RNA-FM), `protein`, and `labels`; `Stage1.ipynb` stores its Nucleotide Transformer embeddings under `rna`, with `protein` and `labels`. | Local and ignored; either notebook overwrites the same path. |
 
 ## Setup
 
