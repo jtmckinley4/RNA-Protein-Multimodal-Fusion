@@ -58,15 +58,15 @@ Main result: Pearson $r=0.503$ predicting CRISPRi effect sizes on held-out pairs
 **Direct relevance:** Medium. CDT uses different encoders (Enformer, scGPT, ESM-C) and a different task (CRISPRi enhancer effects), and it fuses pre-computed gene-level embeddings rather than per-sequence token embeddings. Its value to us is a design idea, directional cross-attention, plus two findings that bear on our Stage 1 results.
 
 **What can be transferred?**
-Our inference: with only RNA and protein, the one-directional pattern reduces to a single translation-direction cross-attention, where each protein residue queries the RNA positions:
+Our inference: on the codon grid, the one-directional pattern becomes DNA to RNA to protein cross-attention. Its translation step has each protein residue query the nucleotide positions:
 
-$$\text{RNA}\to\text{Protein}:\ Q=\text{protein residues},\ K,V=\text{RNA codon positions}\ \Rightarrow\ \text{attn}\in\mathbb{R}^{T/3\times T/3}$$
+$$\text{RNA}\to\text{Protein}:\ Q=\text{protein residues},\ K,V=\text{nucleotide codon positions}\ \Rightarrow\ \text{attn}\in\mathbb{R}^{T/3\times T/3}$$
 
 Because our data is coding-only, both axes sit on the same codon grid, so each attention weight reads directly as "how much this codon informs this residue." That makes it an interpretable variant of the Isoformer-style cross-attention candidate. Two findings also carry over. First, the CDT-III sequel reports that RNA and protein changes often move in opposite directions (66.7 percent of genes with observable mRNA changes), which supports our Stage 1 reading of high uniqueness between these modalities. Second, CDT's attention and gradient attributions overlapped only about 10 percent, which suggests gradient-based attribution as a follow-up to our Track C attention-motif test, since attention alone may not be the right tool for locating what the encoder uses.
 
-**What would need to change?** CDT's direction is built for DNA to RNA to protein over large genomic windows; for our two-modality, coding-only setting the only natural direction is RNA to protein. Enforcing one direction also discards whatever protein-to-RNA information a bidirectional model keeps, so it belongs as a variant tested against bidirectional cross-attention, not as a replacement.
+**What would need to change?** CDT's direction is built for DNA to RNA to protein over large genomic windows; on the coding-only stability data, the DNA and RNA encoders read the same sequence, so a DNA-to-RNA step carries no transcriptional information and the translation direction is the meaningful one. The full direction fits data with genomic context, such as IsoFormer's GTEx set. Enforcing one direction also discards whatever protein-to-RNA information a bidirectional model keeps, so it belongs as a variant tested against bidirectional cross-attention, not as a replacement.
 
-**Key architectural takeaway:** The most useful idea from this paper is one-way RNA-to-protein cross-attention as an interpretable Stage 3 variant, with gradient attribution as a Track C follow-up.
+**Key architectural takeaway:** The most useful idea from this paper is one-way nucleotide-to-protein cross-attention as an interpretable Stage 3 variant, with gradient attribution as a Track C follow-up.
 
 # 9. Final Verdict for Literature Review
 
@@ -78,4 +78,4 @@ Because our data is coding-only, both axes sit on the same codon grid, so each a
 
 | Input | Tokenization | Backbone | Interaction | Objective | Our relevance |
 |---|---|---|---|---|---|
-| Frozen DNA (Enformer bins) + RNA (scGPT gene tokens) + protein (ESM-C) embeddings | Not raw-tokenized; pre-computed per-modality embeddings | Self-attention per modality + directional cross-attention + VCE pooling | One-directional DNA→RNA→protein cross-attention | Huber-loss regression on CRISPRi effect size | Medium: interpretable one-way RNA-to-protein cross-attention variant; evidence for RNA-protein uniqueness |
+| Frozen DNA (Enformer bins) + RNA (scGPT gene tokens) + protein (ESM-C) embeddings | Not raw-tokenized; pre-computed per-modality embeddings | Self-attention per modality + directional cross-attention + VCE pooling | One-directional DNA→RNA→protein cross-attention | Huber-loss regression on CRISPRi effect size | Medium: interpretable one-way nucleotide-to-protein cross-attention variant; evidence for RNA-protein uniqueness |

@@ -1,6 +1,6 @@
 ---
-name: rna-fusion-shared-documentation
-description: Maintain shared RNA-protein project documents and retain reusable research sources. Use for shared documentation or source capture, not individual notes, reviews, or notebook/code changes.
+name: multimodal-bio-shared-documentation
+description: Maintain shared Multimodal Biology project documents and retain reusable research sources. Use for shared documentation or source capture, not individual notes, reviews, or notebook/code changes.
 ---
 
 # Shared research documentation
@@ -11,7 +11,7 @@ Use this workflow within the scope defined by [AGENTS.md](../../../AGENTS.md). M
 
 Read the requested files and the relevant existing explanation. The root README owns the project overview and setup; [docs/README.md](../../../docs/README.md) owns navigation; [agent-context.md](../../../docs/agent-context.md) points to research context and unresolved questions; [sources.md](../../../docs/sources.md) collects selected readings.
 
-Apply shared writing conventions to the root README, shared pages in `docs/`, repository agent instructions, and these skill files. Individual material in `Notes/Reviews/` and personal notes in `Notes/` retains its author's format and voice. When drawing on it for shared documentation, preserve attribution and qualify the interpretation without rewriting the original. Use the repository's [Markdown-formatting workflow](../rna-fusion-markdown-formatting/SKILL.md) for presentation rules, including notebook Markdown formatting. That workflow owns layout and equation presentation; this workflow owns document purpose, tone, attribution, and source retention. A notebook formatting task does not invoke a personal study workflow or authorize executable-code changes.
+Apply shared writing conventions to the root README, shared pages in `docs/`, repository agent instructions, and these skill files. Individual material in `Notes/Reviews/` and personal notes in `Notes/` retains its author's format and voice. When drawing on it for shared documentation, preserve attribution and qualify the interpretation without rewriting the original. Use the repository's [Markdown-formatting workflow](../multimodal-bio-markdown-formatting/SKILL.md) for presentation rules, including notebook Markdown formatting. That workflow owns layout and equation presentation; this workflow owns document purpose, tone, attribution, and source retention. A notebook formatting task does not invoke a personal study workflow or authorize executable-code changes.
 
 ## Write for the reader
 

@@ -1,12 +1,12 @@
-# RNA-Protein-Multimodal-Fusion
+# Multimodal Biology
 
-A research project in the [Complex Adaptive Systems Laboratory](https://complexity.cecs.ucf.edu/directors-welcome/) at the University of Central Florida, studying how to choose and combine pretrained biological foundation models.
+A research project in the [Complex Adaptive Systems Laboratory](https://complexity.cecs.ucf.edu/directors-welcome/) at the University of Central Florida, studying how to choose and combine pretrained DNA, RNA, and protein foundation models. The team's manuscript is the Overleaf project [Multimodal Biology](https://www.overleaf.com/project/6ab8535fb63c8540bed7e56f), which records the Stage 1 methods, metric definitions, and results.
 
 ## Project background
 
-The aim is to develop methods for choosing which biological modalities and pretrained models to combine, and for deciding when and how fusion is useful for a target task. Those choices should be grounded in the biological question and the wet-lab work the predictions could inform. The [meeting slides](Notes/Mina_Meeting_Slides_2026-09-23.pptx), particularly slide 3, frame the contribution as a method for deciding whether and how to fuse.
+The aim is to develop methods for choosing which biological modalities and pretrained models to combine, and for deciding when and how fusion is useful for a target task. The longer-term goal set with Mina Basirat is to fuse several pretrained encoders, with more than one model per modality (for example, several DNA, RNA, and protein models), and to compare those combinations. Those choices should be grounded in the biological question and the wet-lab work the predictions could inform. The [meeting slides](Notes/Mina_Meeting_Slides_2026-09-23.pptx), particularly slide 3, frame the contribution as a method for deciding whether and how to fuse.
 
-The current investigation uses frozen Nucleotide Transformer and ESM-2 encoders to study nucleotide and translated protein representations, beginning with mRNA stability prediction and a synonymous-recoding control. Frozen means that the encoder weights are not updated during these analyses. This is an initial case study within the broader methodology; the choice of future tasks, model combinations, and evaluation criteria remains part of the research.
+The current investigation uses frozen Nucleotide Transformer and ESM-2 encoders to study nucleotide and translated protein representations, beginning with mRNA stability prediction and a synonymous-recoding control. Frozen means that the encoder weights are not updated during these analyses. The Nucleotide Transformer checkpoint used so far (`nucleotide-transformer-500m-human-ref`) was pretrained on the human reference genome, so it is a DNA language model reading the coding sequence in DNA letters; Stage 1 has therefore compared a DNA-model representation with a protein-model representation. The notebooks' `rna_*` variable names refer to this nucleotide branch. This is an initial case study within the broader methodology; the choice of future tasks, model combinations, and evaluation criteria remains part of the research.
 
 ### Architecture priorities
 
@@ -46,6 +46,19 @@ The notebooks contain analyses that:
 
 The concatenated-embedding probe uses a linear model, distinct from the concatenation + MLP reference baseline. These analyses can inform experiment design; their outputs alone do not establish which fusion method to use or validate a wet-lab application.
 
+### Planned extension: DNA and multiple encoders
+
+The next Stage 1 work adds the DNA modality and more than one encoder per modality, and compares against published fusion studies on their own datasets to define what alignment means. The Overleaf section "Stage 1 Extension: Benchmarks and the DNA Modality" holds the full plan; nothing in it has been run yet.
+
+| Setting | Dataset | How DNA enters | Published comparison |
+| --- | --- | --- | --- |
+| A: derived modalities | CodonBERT mRNA stability (the current CSV) | A DNA encoder reads the coding sequence in DNA letters, an RNA encoder reads it in RNA letters, and a protein encoder reads its translation. | [BioLangFusion](Papers/BioLangFusion.pdf), Table 1: best fusion Spearman 0.563 versus 0.553 for the best single encoder. |
+| B: distinct modalities | [IsoFormer GTEx transcript expression](https://huggingface.co/datasets/InstaDeepAI/multi_omics_transcript_expression) | Genomic DNA centered on the transcription start site, alongside the full transcript and the protein. | [IsoFormer](Papers/Multi-Modal-Transfer-Learning.pdf), Table 2: three modalities reach R² 0.43 versus 0.36 for RNA alone. |
+
+In Setting A all three inputs derive from one coding sequence, so differences between encoders come from pretraining corpora and tokenization rather than new biological information. The stability CSV has no gene or transcript identifiers, so genomic context around each gene is not available without a separate mapping step. Setting B supplies DNA that carries promoter and regulatory context absent from the protein.
+
+The planned analysis embeds every sequence with each encoder, then computes decodability probes per encoder; CKA, mutual k-NN, RSA with a permutation test, and held-out CCA with retrieval for every encoder pair, including pairs within one modality; the same comparisons after regressing out sequence composition; and synergy for pairs and triples. Candidate encoders are Nucleotide Transformer (500M human-ref and v2 100M multi-species) and DNABERT-2 for DNA; RNA-FM, an mRNA-trained model such as CodonBERT, and Nucleotide Transformer as an RNA encoder; and ESM-2 at 8M, 35M, and 150M for protein. Starred entries in the Overleaf plan's encoder table match the checkpoints used by BioLangFusion and IsoFormer.
+
 ## Data
 
 The input datasets are included in `Code/`:
@@ -53,7 +66,16 @@ The input datasets are included in `Code/`:
 - [mRFP_Expression.csv](Code/mRFP_Expression.csv): 1,459 rows containing 1,455 distinct sequence strings, from synonymous codon randomization of one gene.
 - [mRNA_Stability.csv](Code/mRNA_Stability.csv): 65,356 rows containing 29,949 distinct sequence strings.
 
-These counts describe the included CSVs before notebook filtering or subsampling. The CSVs were sourced from the fine-tuning benchmark data in [Sanofi-Public/CodonBERT](https://github.com/Sanofi-Public/CodonBERT/tree/master/benchmarks/CodonBERT/data/fine-tune). Their inclusion supplies the notebook inputs; interpreting a prediction still requires checking the source assay, labels, and retained sequence regions.
+These counts describe the included CSVs before notebook filtering or subsampling.
+
+An audit of `mRNA_Stability.csv` on September 29, 2026 recorded the following properties, which matter for comparisons with published results:
+
+- The `Split` column assigns 45,749 rows to train, 9,803 to validation, and 9,804 to test. Of the 8,283 distinct test sequences, 5,392 also occur in training.
+- 12,844 sequences occur more than once, and 12,775 of those carry differing `Value` labels; the median standard deviation of labels within one sequence is 0.49.
+- 37% of rows are at most 1,000 nucleotides, so single-nucleotide encoders with a limit near 1,000 tokens see truncated input for most sequences.
+- [BioLangFusion](Papers/BioLangFusion.pdf), Appendix A.2, reports 41,123 raw and 23,929 used mRNA stability sequences with the CodonBERT splits. Whether this file is the same version, and which filtering produced 23,929, is unresolved.
+
+Comparisons with published numbers should therefore use the official split, while leakage-free estimates need a deduplicated, sequence-disjoint split. The CSVs were sourced from the fine-tuning benchmark data in [Sanofi-Public/CodonBERT](https://github.com/Sanofi-Public/CodonBERT/tree/master/benchmarks/CodonBERT/data/fine-tune). Their inclusion supplies the notebook inputs; interpreting a prediction still requires checking the source assay, labels, and retained sequence regions.
 
 ## Generated files
 
@@ -63,7 +85,7 @@ When code adds or changes an output, update this inventory and its handling. Add
 
 | Generated file | Producer | Purpose | Handling |
 | --- | --- | --- | --- |
-| `Code/stage1_main_embeddings.npz` | `Stage1.ipynb` and `Stage1_refactor.ipynb` | Snapshot of RNA embeddings, protein embeddings, and labels; subsequent analyses use the in-memory arrays. | Local and ignored; either notebook overwrites the same path. |
+| `Code/stage1_main_embeddings.npz` | `Stage1.ipynb` and `Stage1_refactor.ipynb` | Snapshot of nucleotide (DNA-model) embeddings, stored under the key `rna`, protein embeddings, and labels; subsequent analyses use the in-memory arrays. | Local and ignored; either notebook overwrites the same path. |
 
 ## Setup
 

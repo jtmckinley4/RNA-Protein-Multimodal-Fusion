@@ -12,9 +12,9 @@ Use the [project README](README.md) for the overview and layout. Read [research 
 
 ## Shared documentation and sources
 
-For changes to shared documentation or for retaining useful sources from project research, read and apply the repository's [shared-documentation workflow](.agents/skills/rna-fusion-shared-documentation/SKILL.md). Keep its instructions at that path; do not require a contributor's personal skill installation.
+For changes to shared documentation or for retaining useful sources from project research, read and apply the repository's [shared-documentation workflow](.agents/skills/multimodal-bio-shared-documentation/SKILL.md). Keep its instructions at that path; do not require a contributor's personal skill installation.
 
-For presentation changes to shared Markdown or notebook Markdown cells, read and apply the repository's [Markdown-formatting workflow](.agents/skills/rna-fusion-markdown-formatting/SKILL.md). It owns heading definitions, layout, citation placement, and the linked notebook conventions. The shared-documentation workflow owns purpose, tone, attribution, and source retention. Read the parts relevant to the task; do not duplicate their rules here.
+For presentation changes to shared Markdown or notebook Markdown cells, read and apply the repository's [Markdown-formatting workflow](.agents/skills/multimodal-bio-markdown-formatting/SKILL.md). It owns heading definitions, layout, citation placement, and the linked notebook conventions. The shared-documentation workflow owns purpose, tone, attribution, and source retention. Read the parts relevant to the task; do not duplicate their rules here.
 
 These conventions cover the root README, shared pages in `docs/`, repository agent instructions and skill prose, and the presentation of shared notebook Markdown. They do not impose a template on individual `Notes/Reviews/` files or personal notes in `Notes/`. Preserve their authors' voice and attribution. Executable-code formatting and implementation are separate from the Markdown workflow and require no contributor's personal skill installation. Repository-wide scope and preservation rules still apply.
 
@@ -26,7 +26,7 @@ If conflicting directions leave the intended action unclear, explain the specifi
 
 ## Agent entry points
 
-Codex discovers the workflows under `.agents/skills/`. [CLAUDE.md](CLAUDE.md) imports this file for Claude Code. The Claude entry points for [shared documentation](.claude/skills/rna-fusion-shared-documentation/SKILL.md) and [Markdown formatting](.claude/skills/rna-fusion-markdown-formatting/SKILL.md) direct it to the corresponding maintained workflows. Use the exact repository path when resolving a similarly named personal skill.
+Codex discovers the workflows under `.agents/skills/`. [CLAUDE.md](CLAUDE.md) imports this file for Claude Code. The Claude entry points for [shared documentation](.claude/skills/multimodal-bio-shared-documentation/SKILL.md) and [Markdown formatting](.claude/skills/multimodal-bio-markdown-formatting/SKILL.md) direct it to the corresponding maintained workflows. Use the exact repository path when resolving a similarly named personal skill.
 
 These entry points target repository-aware coding applications. Ordinary chat access to a model does not establish access to the checkout or automatic instruction loading. See the [agent documentation sources](docs/sources.md#working-with-repository-aware-agents) for loading behavior and checks.
 
