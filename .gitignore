@@ -18,4 +18,3 @@ Claude outputs/
 
 # Locally generated Stage 1 embeddings
 /Code/stage1_main_embeddings.npz
-/Code/stage1_multi_encoder_cache/

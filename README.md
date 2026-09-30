@@ -34,30 +34,52 @@ Agents working in this repository should start with [AGENTS.md](AGENTS.md).
 
 ## Stage 1 analysis
 
-[Stage1.ipynb](Code/Stage1.ipynb) contains the original representation analysis. [Stage1_refactor.ipynb](Code/Stage1_refactor.ipynb) is a developing refactor with expanded explanations that runs every track on DNA, RNA, and protein embeddings and compares the three modality pairs. The refactor's final section, Multi-encoder extension, repeats the analysis on the same sample for several DNA, RNA, and protein encoders; the three-modality refactor has not yet been run with the real checkpoints. Keep results associated with the notebook and version that produced them.
+[Stage1.ipynb](Code/Stage1.ipynb) contains the original representation analysis. [Stage1_refactor.ipynb](Code/Stage1_refactor.ipynb) is the current Stage 1 notebook, with expanded explanations and an interpretation after each result. It runs every track on DNA, RNA, and protein embeddings of the same 981 retained sequences and compares the three modality pairs. Keep results associated with the notebook and version that produced them.
 
 The notebooks contain analyses that:
 
-1. Check sequence length and start codons, translate nucleotide sequences, and generate matched DNA, RNA, and protein embeddings.
+1. Check sequence length and start codons, translate nucleotide sequences, generate matched DNA, RNA, and protein embeddings, and audit the full stability file against the version used by BioLangFusion.
 2. Probe prediction from each representation separately and from concatenated embeddings, with sequence-feature controls.
-3. Compare representation geometry using linear CKA and additional neighborhood, correlation, and retrieval diagnostics; visualize embeddings with UMAP.
+3. Compare representation geometry using linear CKA and additional neighborhood, correlation, and retrieval diagnostics, repeat CKA and retrieval after removing sequence composition, and visualize embeddings with UMAP.
 4. Examine the mRFP expression dataset as a synonymous-recoding control.
-5. Explore DNA-encoder and RNA-encoder attention, candidate sequence patterns, and relationships between representation similarity and prediction error.
+5. Explore DNA-encoder and RNA-encoder attention, candidate sequence patterns, relationships between representation similarity and prediction error, and representational similarity with a Mantel permutation test.
 
 The concatenated-embedding probe uses a linear model, distinct from the concatenation + MLP reference baseline. These analyses can inform experiment design; their outputs alone do not establish which fusion method to use or validate a wet-lab application.
 
-### Planned extension: DNA and multiple encoders
+### Stage 1 results
 
-The next Stage 1 work adds the DNA modality and more than one encoder per modality, and compares against published fusion studies on their own datasets to define what alignment means. The Overleaf section "Stage 1 Extension: Benchmarks and the DNA Modality" holds the full plan; nothing in it has been run yet.
+The main results from [Stage1_refactor.ipynb](Code/Stage1_refactor.ipynb), with 981 retained sequences and five grouped folds. The notebook's result notes give the full tables and interpretations.
+
+| Analysis | DNA | RNA | Protein |
+| --- | --- | --- | --- |
+| Stability probe, mean $R^2$ (fold SD) | 0.015 (0.072) | 0.028 (0.065) | 0.103 (0.034) |
+| GC content, mean $R^2$ | 0.986 | 0.950 | 0.678 |
+| GC3, mean $R^2$ | 0.969 | 0.919 | 0.380 |
+| Share of embedding variance explained by composition | 0.618 | 0.677 | 0.446 |
+
+| Pair | Linear CKA | CKA after composition control | CCA Recall@1 (chance 0.0034) | Recall@1 after composition control | RSA (Mantel $p$) |
+| --- | --- | --- | --- | --- | --- |
+| DNA-RNA | 0.530 | 0.101 | 0.549 | 0.112 | 0.548 (0.002) |
+| DNA-protein | 0.128 | 0.027 | 0.366 | 0.024 | 0.234 (0.002) |
+| RNA-protein | 0.199 | 0.055 | 0.224 | 0.054 | 0.238 (0.002) |
+
+- Only the protein embedding carries a consistent linear stability signal, and concatenating modalities does not improve on it (best combination 0.103).
+- The DNA and RNA embeddings retain synonymous codon information that the protein embedding cannot, shown by the GC3 probes.
+- Most agreement between modalities comes from shared sequence composition: removing letter, codon, and amino-acid frequencies cuts CKA by 72% to 81% and retrieval to between 7 and 33 times chance.
+- The synonymous-recoding control behaves as expected, and neither nucleotide encoder attends more to candidate stability motifs.
+
+### Next steps: multiple encoders and published benchmarks
+
+Stage 1 now covers the DNA modality with one encoder per modality. The next work adds more than one encoder per modality and compares against published fusion studies on the same inputs to define what alignment means. The Overleaf section "Stage 1 Extension: Benchmarks and the DNA Modality" holds the plan; it will be implemented in a separate notebook.
 
 | Setting | Dataset | How DNA enters | Published comparison |
 | --- | --- | --- | --- |
-| A: derived modalities | CodonBERT mRNA stability (the current CSV) | A DNA encoder reads the coding sequence in DNA letters, an RNA encoder reads it in RNA letters, and a protein encoder reads its translation. | [BioLangFusion](Papers/BioLangFusion.pdf), Table 1: best fusion Spearman 0.563 versus 0.553 for the best single encoder. |
+| A: derived modalities | CodonBERT mRNA stability (the current CSV) | A DNA encoder reads the coding sequence in DNA letters, an RNA encoder reads it in RNA letters, and a protein encoder reads its translation. This is the Stage 1 setup. | [BioLangFusion](Papers/BioLangFusion.pdf), Table 1: best fusion Spearman 0.563 versus 0.553 for the best single encoder. |
 | B: distinct modalities | [IsoFormer GTEx transcript expression](https://huggingface.co/datasets/InstaDeepAI/multi_omics_transcript_expression) | Genomic DNA centered on the transcription start site, alongside the full transcript and the protein. | [IsoFormer](Papers/Multi-Modal-Transfer-Learning.pdf), Table 2: three modalities reach R² 0.43 versus 0.36 for RNA alone. |
 
 In Setting A all three inputs derive from one coding sequence, so differences between encoders come from pretraining corpora and tokenization rather than new biological information. The stability CSV has no gene or transcript identifiers, so genomic context around each gene is not available without a separate mapping step. Setting B supplies DNA that carries promoter and regulatory context absent from the protein.
 
-The Multi-encoder extension section of [Stage1_refactor.ipynb](Code/Stage1_refactor.ipynb) implements Setting A. It embeds every sequence with each encoder, then computes decodability probes per encoder; CKA, mutual k-NN, RSA with a permutation test, and held-out CCA with retrieval for every encoder pair, including pairs within one modality; the same comparisons after regressing out sequence composition; and synergy for pairs and triples. Candidate encoders are Nucleotide Transformer (500M human-ref and v2 100M multi-species) and DNABERT-2 for DNA; RNA-FM and mRNA-FM for RNA; and ESM-2 at 8M, 35M, and 150M for protein. Starred entries in the Overleaf plan's encoder table match the checkpoints used by BioLangFusion and IsoFormer.
+Candidate additional encoders are Nucleotide Transformer v2 100M multi-species (BioLangFusion's DNA encoder) and DNABERT-2 for DNA, mRNA-FM for RNA, and ESM-2 8M (BioLangFusion) and 150M (IsoFormer) for protein. Nucleotide Transformer v2 and DNABERT-2 load custom model code written for `transformers` 4, which needs small compatibility adjustments under `transformers` 5. Trained fusion architectures, including BioLangFusion's fusion heads and IsoFormer's cross-attention, need token-level embeddings and belong to the fusion stage.
 
 ## Data
 
@@ -68,7 +90,7 @@ The input datasets are included in `Code/`:
 
 These counts describe the included CSVs before notebook filtering or subsampling.
 
-An audit of `mRNA_Stability.csv` on September 29, 2026 recorded the following properties, which matter for comparisons with published results:
+The Dataset audit cell in [Stage1_refactor.ipynb](Code/Stage1_refactor.ipynb) records the following properties of `mRNA_Stability.csv`, which matter for comparisons with published results:
 
 - The `Split` column assigns 45,749 rows to train, 9,803 to validation, and 9,804 to test. Of the 8,283 distinct test sequences, 5,392 also occur in training.
 - 12,844 sequences occur more than once, and 12,775 of those carry differing `Value` labels; the median standard deviation of labels within one sequence is 0.49.
@@ -85,8 +107,6 @@ When code adds or changes an output, update this inventory and its handling. Add
 
 | Generated file | Producer | Purpose | Handling |
 | --- | --- | --- | --- |
-| `Code/stage1_multi_encoder_cache/*.npz` | `Stage1_refactor.ipynb`, Multi-encoder extension | Per-encoder embeddings of the main sample and the mRFP control for encoders other than the two Stage 1 encoders; file names include a hash of the inputs, checkpoint, and token limit. | Local and ignored; delete to force re-embedding. |
-| `Code/stage1_multi_encoder_results/` | `Stage1_refactor.ipynb`, Multi-encoder extension | Small CSV tables (encoder status, probes, pairwise alignment with and without composition control, synergy, control spread) and `run_info.json` with package versions and device. | Not ignored; commit a run's folder deliberately when its results are reported. |
 | `Code/stage1_main_embeddings.npz` | `Stage1.ipynb` and `Stage1_refactor.ipynb` | Snapshot of embeddings and labels; subsequent analyses use the in-memory arrays. `Stage1_refactor.ipynb` stores the keys `dna`, `rna` (RNA-FM), `protein`, and `labels`; `Stage1.ipynb` stores its Nucleotide Transformer embeddings under `rna`, with `protein` and `labels`. | Local and ignored; either notebook overwrites the same path. |
 
 ## Setup
@@ -96,14 +116,14 @@ When code adds or changes an output, update this inventory and its handling. Add
 Use your existing Python environment for the project. Install PyTorch using the [official installation selector](https://pytorch.org/get-started/locally/) for your operating system and CPU or CUDA configuration. Install the remaining notebook dependencies in that environment:
 
 ```sh
-python -m pip install numpy pandas scipy scikit-learn umap-learn matplotlib biopython transformers ipykernel
+python -m pip install numpy pandas scipy scikit-learn umap-learn matplotlib biopython "transformers==5.15.1" multimolecule ipykernel
 ```
 
 Open notebooks with VS Code's Python and Jupyter extensions and [select the environment containing these packages as the kernel](https://code.visualstudio.com/docs/datascience/jupyter-kernel-management). Use `Code/` as the kernel's working directory because the notebooks use relative CSV and output paths.
 
-The notebooks use CUDA when available and otherwise run on CPU. The first run downloads `InstaDeepAI/nucleotide-transformer-500m-human-ref` and `facebook/esm2_t12_35M_UR50D`, unless they are already cached. Hugging Face normally stores these downloads in the [user's cache](https://huggingface.co/docs/transformers/installation#cache-directory); the notebooks do not configure the repository's `.model-cache/` directory.
+The notebooks use CUDA when available and otherwise run on CPU. `multimolecule` provides RNA-FM. Version 0.2.1 imports with `transformers` 5.14.1 and 5.15.1 but not 5.16 or later, which is why `transformers` is pinned. If `import multimolecule` fails in an Anaconda environment with an older `datasets` or `huggingface_hub`, upgrade `datasets` and `fsspec` and reinstall `huggingface_hub`.
 
-The Multi-encoder extension section of [Stage1_refactor.ipynb](Code/Stage1_refactor.ipynb) also needs `multimolecule` for the RNA encoders and `einops` for DNABERT-2. `multimolecule` 0.2.1 imports with `transformers` 5.14.1 and 5.15.1 but not 5.16 or later, so install `python -m pip install "transformers==5.15.1" multimolecule einops` before running that section. Its encoders are downloaded from Hugging Face on first use; a checkpoint that fails to load is recorded in the section's status table and skipped.
+The first run of [Stage1_refactor.ipynb](Code/Stage1_refactor.ipynb) downloads `InstaDeepAI/nucleotide-transformer-500m-human-ref`, `multimolecule/rnafm`, and `facebook/esm2_t12_35M_UR50D`, unless they are already cached. Hugging Face normally stores these downloads in the [user's cache](https://huggingface.co/docs/transformers/installation#cache-directory); the notebooks do not configure the repository's `.model-cache/` directory.
 
 This dependency list covers the imports in the Stage 1 notebooks. A fresh-environment run has not been verified, and the repository does not yet pin package versions or model revisions for reproducibility.
 
