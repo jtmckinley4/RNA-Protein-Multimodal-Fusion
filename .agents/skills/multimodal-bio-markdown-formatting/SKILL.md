@@ -1,6 +1,6 @@
 ---
 name: multimodal-bio-markdown-formatting
-description: Format shared Multimodal Biology project Markdown, repository skill prose, and notebook Markdown cells using defined headings, separators, lists, citations, and LaTeX math. Use for presentation changes; exclude executable code and individual notes or reviews.
+description: Format shared multimodal-bio-fusion project Markdown, repository skill prose, and notebook Markdown cells using defined headings, separators, lists, citations, and LaTeX math. Use for presentation changes; exclude executable code and individual notes or reviews.
 ---
 
 # Shared Markdown formatting

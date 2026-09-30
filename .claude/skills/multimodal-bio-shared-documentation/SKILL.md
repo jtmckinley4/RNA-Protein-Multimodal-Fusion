@@ -1,6 +1,6 @@
 ---
 name: multimodal-bio-shared-documentation
-description: Maintain shared Multimodal Biology project documents and retain reusable research sources. Use for shared documentation or source capture, not individual notes, reviews, or notebook/code changes.
+description: Maintain shared multimodal-bio-fusion project documents and retain reusable research sources. Use for shared documentation or source capture, not individual notes, reviews, or notebook/code changes.
 ---
 
 # Shared research documentation

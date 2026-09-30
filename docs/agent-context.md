@@ -10,7 +10,7 @@ The refactor uses one frozen encoder per modality: Nucleotide Transformer 500M h
 
 ## Project scope: DNA and multiple encoders
 
-Mina Basirat set the longer-term goal of fusing several pretrained encoders, with more than one model per modality across DNA, RNA, and protein. Stage 1 includes DNA with one encoder per modality. The [next steps](../README.md#next-steps-multiple-encoders-and-published-benchmarks) add several encoders per modality and compare against BioLangFusion on the CodonBERT stability data, where all three modality inputs derive from one coding sequence, and against IsoFormer on its GTEx transcript-expression data, where genomic DNA is a distinct input. The Overleaf project "Multimodal Biology" holds the Stage 1 record and this plan. These comparisons are plans, not implemented methods.
+Mina Basirat set the longer-term goal of fusing several pretrained encoders, with more than one model per modality across DNA, RNA, and protein. Stage 1 includes DNA with one encoder per modality. The [next steps](../README.md#next-steps-multiple-encoders-and-published-benchmarks) add several encoders per modality and compare against BioLangFusion on the CodonBERT stability data, where all three modality inputs derive from one coding sequence, and against IsoFormer on its GTEx transcript-expression data, where genomic DNA is a distinct input. The Overleaf project "multimodal-bio-fusion" holds the Stage 1 record and this plan. These comparisons are plans, not implemented methods.
 
 ## Evidence and unresolved questions
 
