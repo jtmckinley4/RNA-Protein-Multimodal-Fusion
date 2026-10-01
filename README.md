@@ -121,7 +121,7 @@ python -m pip install numpy pandas scipy scikit-learn umap-learn matplotlib biop
 
 Open notebooks with VS Code's Python and Jupyter extensions and [select the environment containing these packages as the kernel](https://code.visualstudio.com/docs/datascience/jupyter-kernel-management). Use `Code/` as the kernel's working directory because the notebooks use relative CSV and output paths.
 
-The notebooks use CUDA when available and otherwise run on CPU. `multimolecule` provides RNA-FM. Version 0.2.1 imports with `transformers` 5.14.1 and 5.15.1 but not 5.16 or later, which is why `transformers` is pinned. If `import multimolecule` fails in an Anaconda environment with an older `datasets` or `huggingface_hub`, upgrade `datasets` and `fsspec` and reinstall `huggingface_hub`.
+[Stage1_refactor.ipynb](Code/Stage1_refactor.ipynb) uses a CUDA GPU when available, then an Apple Silicon GPU through PyTorch's MPS backend, and otherwise the CPU. [Stage1.ipynb](Code/Stage1.ipynb) uses CUDA or the CPU. `multimolecule` provides RNA-FM. Version 0.2.1 imports with `transformers` 5.14.1 and 5.15.1 but not 5.16 or later, which is why `transformers` is pinned. If `import multimolecule` fails in an Anaconda environment with an older `datasets` or `huggingface_hub`, upgrade `datasets` and `fsspec` and reinstall `huggingface_hub`.
 
 The first run of [Stage1_refactor.ipynb](Code/Stage1_refactor.ipynb) downloads `InstaDeepAI/nucleotide-transformer-500m-human-ref`, `multimolecule/rnafm`, and `facebook/esm2_t12_35M_UR50D`, unless they are already cached. Hugging Face normally stores these downloads in the [user's cache](https://huggingface.co/docs/transformers/installation#cache-directory); the notebooks do not configure the repository's `.model-cache/` directory.
 
