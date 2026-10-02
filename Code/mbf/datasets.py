@@ -1,0 +1,133 @@
+"""Registry of labeled sequence datasets, and the inputs each encoder reads from them.
+
+Every entry names its file, sequence and label columns, task, published split column,
+and setting. In the "derived" setting (Setting A in the README), each row holds one
+coding sequence: DNA encoders read it in DNA letters, RNA encoders read it in RNA
+letters, and protein encoders read its translation. Datasets whose rows carry separate
+DNA, transcript, and protein sequences, such as IsoFormer's GTEx data (Setting B), will
+add a second setting.
+"""
+
+from __future__ import annotations
+
+import os
+from dataclasses import dataclass
+
+import numpy as np
+import pandas as pd
+
+from .encoders import encoder_input
+from .sequences import is_in_frame_and_starts_correctly, translate_cds
+
+
+@dataclass(frozen=True)
+class DatasetSpec:
+    """A labeled sequence dataset and where its encoder inputs come from.
+
+    path is relative to the Code directory. split_column names the column holding the
+    published train, validation, and test assignment, when the file has one.
+    """
+
+    key: str
+    label: str
+    path: str
+    sequence_column: str
+    label_column: str
+    task: str
+    setting: str
+    split_column: str | None = None
+    source: str = ""
+
+
+_CODONBERT = "CodonBERT fine-tuning benchmark, github.com/Sanofi-Public/CodonBERT"
+
+DATASETS = {
+    d.key: d
+    for d in [
+        DatasetSpec("mrna_stability", "mRNA stability", "mRNA_Stability.csv", "Sequence", "Value",
+                    task="regression", setting="derived", split_column="Split", source=_CODONBERT),
+        DatasetSpec("mrfp_expression", "mRFP expression (synonymous-recoding control)",
+                    "mRFP_Expression.csv", "Sequence", "Value",
+                    task="regression", setting="derived", split_column="Split", source=_CODONBERT),
+    ]
+}
+
+
+def is_retained(seq):
+    """Apply the Stage 1 filters to one uppercase, stripped coding sequence.
+
+    A sequence is kept when its length is a multiple of three, it starts with ATG or
+    AUG, and it translates to at least five amino acids.
+    """
+    return is_in_frame_and_starts_correctly(seq) and len(translate_cds(seq)) >= 5
+
+
+def retained_rows(df, seq_col, label_col=None):
+    """Apply the Stage 1 filters and return (sequences, labels, lengths) in input order.
+
+    A row is kept when its length is a multiple of three, it starts with ATG or AUG,
+    and it translates to at least five amino acids. These are the filters used in
+    Stage1_refactor.ipynb, so the same sample yields the same retained rows.
+    """
+    seqs, labels = [], []
+    for _, row in df.iterrows():
+        seq = str(row[seq_col]).strip().upper()
+        if not is_retained(seq):
+            continue
+        seqs.append(seq)
+        if label_col is not None:
+            labels.append(row[label_col])
+    lengths = np.array([len(s) for s in seqs]).reshape(-1, 1)
+    return seqs, (np.array(labels) if label_col is not None else None), lengths
+
+
+@dataclass
+class Dataset:
+    """The retained rows of one dataset, in input order.
+
+    rows keeps the original file index and columns, so published splits and other
+    columns stay attached to each retained sequence.
+    """
+
+    spec: DatasetSpec
+    rows: pd.DataFrame
+    sequences: list[str]
+    labels: np.ndarray
+
+    @property
+    def groups(self):
+        """Cross-validation groups: identical sequences share a group."""
+        return self.sequences
+
+    @property
+    def lengths(self):
+        """Sequence lengths as a one-column matrix, for the length-only baseline probe."""
+        return np.array([len(s) for s in self.sequences]).reshape(-1, 1)
+
+    def inputs_for(self, encoder):
+        """Return the string each retained row contributes to one encoder."""
+        if self.spec.setting != "derived":
+            raise NotImplementedError(f"inputs for the {self.spec.setting!r} setting")
+        return [encoder_input(encoder, s) for s in self.sequences]
+
+
+def load_dataset(key, n_rows=None, seed=42, data_dir="."):
+    """Load a registered dataset and keep the rows that pass the Stage 1 filters.
+
+    With n_rows, a random sample of that many rows is drawn with seed before filtering,
+    as in the Stage 1 notebooks; otherwise the whole file is used. data_dir is the
+    directory holding the files, the Code directory by default.
+    """
+    spec = DATASETS[key]
+    df = pd.read_csv(os.path.join(data_dir, spec.path)).dropna(subset=[spec.sequence_column])
+    if n_rows is not None:
+        df = df.sample(n=n_rows, random_state=seed)
+    sequences = [str(value).strip().upper() for value in df[spec.sequence_column]]
+    keep = np.array([is_retained(s) for s in sequences], dtype=bool)
+    rows = df[keep]
+    return Dataset(
+        spec=spec,
+        rows=rows,
+        sequences=[s for s, kept in zip(sequences, keep) if kept],
+        labels=rows[spec.label_column].to_numpy(),
+    )
