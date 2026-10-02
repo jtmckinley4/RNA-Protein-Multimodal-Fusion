@@ -15,22 +15,26 @@ from scipy.spatial.distance import pdist, squareform
 from scipy.stats import mannwhitneyu, rankdata, spearmanr
 from sklearn.cross_decomposition import CCA
 from sklearn.decomposition import PCA
-from sklearn.linear_model import LogisticRegression, RidgeCV
-from sklearn.model_selection import GroupKFold, cross_val_score
+from sklearn.linear_model import LinearRegression, LogisticRegression, RidgeCV
+from sklearn.metrics.pairwise import cosine_similarity
+from sklearn.model_selection import KFold, cross_val_score
 from sklearn.neighbors import NearestNeighbors
 from sklearn.pipeline import Pipeline
 from sklearn.preprocessing import StandardScaler
+
+from .splits import grouped_folds
 
 
 # ---------------------------------------------------------------------------
 # Probes
 # ---------------------------------------------------------------------------
 
-def probe_scores(X, y, groups=None, continuous=True):
+def probe_scores(X, y, groups=None, continuous=True, seed=42):
     """Return the five held-out fold scores of a standardized linear probe.
 
     Continuous targets use RidgeCV over 20 log-spaced penalties and R^2. With `groups`
-    (the retained sequence strings), GroupKFold keeps identical sequences in one fold.
+    (the retained sequence strings), grouped_folds with this seed keeps identical
+    sequences in one fold; the default seed is the pinned assignment.
     """
     if continuous:
         model, scoring = RidgeCV(alphas=np.logspace(-3, 5, 20)), "r2"
@@ -38,14 +42,29 @@ def probe_scores(X, y, groups=None, continuous=True):
         model, scoring = LogisticRegression(max_iter=2000), "accuracy"
     pipeline = Pipeline([("scale", StandardScaler()), ("model", model)])
     if groups is not None:
-        return cross_val_score(pipeline, X, y, cv=GroupKFold(n_splits=5), groups=groups, scoring=scoring)
+        return cross_val_score(pipeline, X, y, cv=grouped_folds(groups, seed=seed), scoring=scoring)
     return cross_val_score(pipeline, X, y, cv=5, scoring=scoring)
 
 
-def probe_table(embeddings, targets, groups):
-    """Return mean and fold SD of probe R^2 for every (embedding, target) combination.
+def probe_assignment_means(X, y, groups, n_assignments=10, continuous=True):
+    """Return the five-fold mean probe score for each of n_assignments fold assignments.
 
-    embeddings: {name: matrix}; targets: {target name: vector}.
+    The assignments use seeds 0 through n_assignments - 1. They reuse the same rows, so
+    the spread of these means shows how much a result depends on the partition; it is
+    not a standard error.
+    """
+    return np.array([
+        probe_scores(X, y, groups=groups, continuous=continuous, seed=s).mean()
+        for s in range(n_assignments)
+    ])
+
+
+def probe_table(embeddings, targets, groups, n_assignments=10):
+    """Return probe R^2 for every (embedding, target) combination.
+
+    embeddings: {name: matrix}; targets: {target name: vector}. For each target, the
+    table gives the mean and fold SD on the pinned folds, then the mean and SD of the
+    five-fold means over n_assignments further fold assignments (omitted when 0).
     """
     rows = []
     for name, X in embeddings.items():
@@ -54,6 +73,10 @@ def probe_table(embeddings, targets, groups):
             scores = probe_scores(X, y, groups=groups)
             row[f"{target} R2"] = scores.mean()
             row[f"{target} SD"] = scores.std()
+            if n_assignments:
+                means = probe_assignment_means(X, y, groups, n_assignments)
+                row[f"{target} R2, {n_assignments} assignments"] = means.mean()
+                row[f"{target} SD, {n_assignments} assignments"] = means.std()
         rows.append(row)
     return pd.DataFrame(rows).set_index("encoder")
 
@@ -100,6 +123,52 @@ def cca_retrieval(X_a, X_b, train_idx, test_idx, seed, n_pca=50, n_cca=10, ks=(1
     )
     recall = {k: np.mean([i in neighbors[i, :k] for i in range(n_test)]) for k in ks}
     return {"correlations": corrs, "recall": recall, "test_coords": (a_c, b_c)}
+
+
+def alignment_error_association(cca_a, cca_b, stability_labels, n_folds=5, seed=42):
+    """Correlate sample-level CCA cosine similarity with out-of-fold error.
+
+    Inputs are matched CCA-projected rows of two modalities and their stability labels.
+    This exploratory rank association adapts the paper's motivation; it is
+    not its across-model alignment-performance slope or an alignment-loss test.
+    """
+    # Compare paired rows in the existing CCA coordinate system.
+    local_alignment = np.array([
+        cosine_similarity(cca_a[i:i+1], cca_b[i:i+1])[0, 0]
+        for i in range(len(stability_labels))
+    ])
+
+    # Fit ordinary linear regression and collect held-out absolute errors.
+    fused = np.concatenate([cca_a, cca_b], axis=1)
+    kf = KFold(n_splits=n_folds, shuffle=True, random_state=seed)
+    errors = np.zeros(len(stability_labels))
+    for train_idx, test_idx in kf.split(fused):
+        reg = LinearRegression().fit(fused[train_idx], stability_labels[train_idx])
+        errors[test_idx] = np.abs(reg.predict(fused[test_idx]) - stability_labels[test_idx])
+
+    rho, p_value = spearmanr(local_alignment, errors)
+    return {"spearman": rho, "p_value": p_value}
+
+
+def layerwise_cka(layers_a, layers_b):
+    """Return the matrix of linear CKA between every hidden state of two encoders.
+
+    Row i is state i of the first encoder and column j state j of the second; state 0
+    is the embedding output before the first transformer block.
+    """
+    return np.array([[linear_cka(A, B) for B in layers_b] for A in layers_a])
+
+
+def layerwise_summary(matrix):
+    """Return the maximum CKA and its states, the maximum without the second encoder's
+    state 0, and the final-state CKA for one layer-wise matrix."""
+    i, j = np.unravel_index(matrix.argmax(), matrix.shape)
+    i1, j1 = np.unravel_index(matrix[:, 1:].argmax(), matrix[:, 1:].shape)
+    return {
+        "maximum": matrix.max(), "at states": f"{i}, {j}",
+        "maximum without second state 0": matrix[:, 1:].max(), "at states (without)": f"{i1}, {j1 + 1}",
+        "final states": matrix[-1, -1],
+    }
 
 
 def compute_rsa(embeddings_a, embeddings_b):
@@ -151,6 +220,11 @@ def residualize(X, F):
     return X - design @ coef
 
 
+def centroid_spread(Z):
+    """Mean Euclidean distance of the rows of Z from their centroid."""
+    return np.linalg.norm(Z - Z.mean(axis=0), axis=1).mean()
+
+
 def composition_share(X, X_residual):
     """Share of an embedding's total variance explained by the composition fit (in sample)."""
     total = ((X - X.mean(axis=0)) ** 2).sum()
@@ -161,28 +235,123 @@ def composition_share(X, X_residual):
 # Attention at candidate motifs
 # ---------------------------------------------------------------------------
 
+def aggregate_attention(attentions, layer=-1, mode="incoming"):
+    """Summarize one layer and min-max rescale its token-position scores.
+
+    Incoming scores sum over queries after averaging heads. Other mode values
+    use row sums. Special-token positions remain included at this step.
+    """
+    layer_att = attentions[layer].mean(axis=0)  # (query_tokens, key_tokens)
+    score = layer_att.sum(axis=0) if mode == "incoming" else layer_att.sum(axis=1)
+    score = (score - score.min()) / (score.max() - score.min() + 1e-8)
+    return score
+
+
+def expand_token_attention_to_nucleotides(attn_score, tokens):
+    """Repeat scores by token-string length after excluding special tokens.
+
+    Assumes retained token strings spell the covered nucleotides in order.
+    The expansion cannot restore sequence positions removed by truncation.
+    """
+    expanded = []
+    for score, tok in zip(attn_score, tokens):
+        if tok.startswith("<") or tok.startswith("["):
+            continue
+        expanded.extend([score] * len(tok))
+    return np.array(expanded)
+
+
 def attention_motif_overlap(attention_score, motif_hits):
-    """One-sided Mann-Whitney comparison of attention at motif positions versus elsewhere."""
+    """Return descriptive means and nominal one-sided rank-test p-values.
+
+    Compare the union of covered positions with its complement, then repeat
+    by pattern. Return None when the pooled comparison has an empty group.
+    """
     def _test(positions):
-        others = set(range(len(attention_score))) - positions
-        if not positions or not others:
+        """Compare one position set with all other positions in the array."""
+        non_positions = set(range(len(attention_score))) - positions
+        if not positions or not non_positions:
             return None
-        at, off = attention_score[list(positions)], attention_score[list(others)]
+        at = attention_score[list(positions)]
+        off = attention_score[list(non_positions)]
+        stat, pval = mannwhitneyu(at, off, alternative="greater")
         return {
-            "mean_at_motifs": at.mean(),
-            "mean_elsewhere": off.mean(),
-            "p_value": mannwhitneyu(at, off, alternative="greater").pvalue,
+            "mean_attention_at_motifs": at.mean(),
+            "mean_attention_elsewhere": off.mean(),
+            "n_motif_positions": len(positions),
+            "p_value": pval,
         }
 
-    all_positions, by_name = set(), {}
+    all_positions = set()
+    by_name = {}
     for start, end, name in motif_hits:
         positions = set(range(start, min(end, len(attention_score))))
-        all_positions |= positions
+        all_positions.update(positions)
         by_name.setdefault(name, set()).update(positions)
+
     result = _test(all_positions)
-    if result is not None:
-        result["by_motif"] = {name: _test(p) for name, p in by_name.items()}
+    if result is None:
+        return None
+    result["by_motif"] = {
+        name: _test(positions) for name, positions in by_name.items()
+    }
     return result
+
+
+def attention_summary(results_by_encoder, labels, motifs):
+    """Return one row per encoder and pattern: usable sequences, nominal p < 0.05 share, mean gap.
+
+    results_by_encoder maps an encoder key to its list of attention_motif_overlap results.
+    The pooled row uses every result; each pattern row uses only the results with an
+    available comparison for that pattern.
+    """
+    rows = []
+    for key, results in results_by_encoder.items():
+        groups = {"All patterns pooled": results}
+        for motif in motifs:
+            groups[motif] = [r["by_motif"][motif] for r in results if r["by_motif"].get(motif)]
+        for motif, group in groups.items():
+            row = {"encoder": labels[key], "pattern": motif, "sequences with hits": len(group)}
+            if group:
+                row["fraction with nominal p < 0.05"] = np.mean([g["p_value"] < 0.05 for g in group])
+                row["mean gap"] = np.mean(
+                    [g["mean_attention_at_motifs"] - g["mean_attention_elsewhere"] for g in group]
+                )
+            rows.append(row)
+    return pd.DataFrame(rows).set_index(["encoder", "pattern"])
+
+
+MOTIF_COLORS = {
+    "ARE_pentamer": "#97BC62",
+    "ARE_nonamer": "#2C5F2D",
+    "m6A_DRACH": "#6B6B63",
+}
+
+
+def plot_attention_with_motifs(attention_score, motif_hits, title=""):
+    """Plot expanded attention scores and candidate sequence-pattern spans."""
+    import matplotlib.pyplot as plt
+
+    fig, ax = plt.subplots(figsize=(14, 3))
+    ax.plot(attention_score, color="black", linewidth=1)
+    ax.fill_between(
+        range(len(attention_score)), attention_score, color="gray", alpha=0.15
+    )
+    seen = set()
+    for start, end, name in motif_hits:
+        color = MOTIF_COLORS.get(name, "gray")
+        ax.axvspan(
+            start, end, color=color, alpha=0.35,
+            label=name if name not in seen else None,
+        )
+        seen.add(name)
+    ax.set_xlabel("Sequence position")
+    ax.set_ylabel("Attention score (normalized)")
+    ax.set_title(title)
+    if seen:
+        ax.legend(loc="upper right", fontsize=8, ncol=len(seen))
+    plt.tight_layout()
+    plt.show()
 
 
 # ---------------------------------------------------------------------------
@@ -232,4 +401,42 @@ def plot_matrices(matrices, labels, diverging=(), fmt="{:.2f}"):
         ax.set_title(title)
         fig.colorbar(im, ax=ax, fraction=0.046, pad=0.04)
     fig.tight_layout()
+    plt.show()
+
+
+MODALITY_COLORS = {"DNA": "#2C5F2D", "RNA": "#6B6B63", "protein": "#97BC62"}
+
+
+def plot_layerwise(matrices, labels):
+    """Draw layer-wise CKA heatmaps for several encoder pairs on one shared color scale."""
+    import matplotlib.pyplot as plt
+
+    vmax = max(m.max() for m in matrices.values())
+    fig, axes = plt.subplots(1, len(matrices), figsize=(6 * len(matrices), 5.5), squeeze=False)
+    for ax, ((a, b), m) in zip(axes[0], matrices.items()):
+        im = ax.imshow(m, cmap="Greens", aspect="auto", origin="lower", vmin=0, vmax=vmax)
+        ax.set_xlabel(f"{labels[b]} state (0 = embedding output)")
+        ax.set_ylabel(f"{labels[a]} state (0 = embedding output)")
+        ax.set_title(f"Layer-wise linear CKA, {labels[a]} vs {labels[b]}", fontsize=10)
+    fig.colorbar(im, ax=axes[0].tolist(), label="CKA")
+    plt.show()
+
+
+def plot_umap(embeddings, labels, modality, seed=42, n_cols=4):
+    """Fit and draw a separate two-dimensional UMAP layout for each embedding matrix."""
+    import matplotlib.pyplot as plt
+    import umap
+
+    keys = list(embeddings)
+    n_rows = -(-len(keys) // n_cols)
+    fig, axes = plt.subplots(n_rows, n_cols, figsize=(4.5 * n_cols, 4.2 * n_rows), squeeze=False)
+    for ax, key in zip(axes.flat, keys):
+        coords = umap.UMAP(random_state=seed).fit_transform(embeddings[key])
+        ax.scatter(coords[:, 0], coords[:, 1], s=8, color=MODALITY_COLORS.get(modality[key], "gray"))
+        ax.set_title(labels[key], fontsize=10)
+        ax.set_xticks([])
+        ax.set_yticks([])
+    for ax in list(axes.flat)[len(keys):]:
+        ax.axis("off")
+    plt.tight_layout()
     plt.show()

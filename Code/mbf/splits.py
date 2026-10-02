@@ -6,19 +6,33 @@ fusion runs can be evaluated on identical rows.
 
 from __future__ import annotations
 
+import hashlib
+
 import numpy as np
 import pandas as pd
-from sklearn.model_selection import GroupKFold, train_test_split
+from sklearn.model_selection import train_test_split
 
 
-def grouped_folds(groups, n_splits=5):
-    """Return (train, test) index pairs that keep each group within one fold.
+def grouped_folds(groups, n_splits=5, seed=42):
+    """Return (train, test) row indices with each group in exactly one held-out fold.
 
-    With the sequence strings as groups, identical sequences never fall on both sides.
-    These are the folds probe_scores uses when it receives groups.
+    A group's fold is the SHA-256 hash of the seed and its string, modulo n_splits, so the
+    assignment is the same on every machine and library version, identical sequences
+    always share a fold, and a sequence keeps its fold in any sample that contains it.
+    Stage1_refactor.ipynb defines the same function. These are the folds probe_scores
+    uses when it receives groups.
     """
-    n = len(groups)
-    return list(GroupKFold(n_splits=n_splits).split(np.zeros((n, 1)), groups=groups))
+    fold_of_row = np.array([
+        int(hashlib.sha256(f"{seed}:{g}".encode()).hexdigest(), 16) % n_splits
+        for g in groups
+    ])
+    folds = [
+        (np.flatnonzero(fold_of_row != k), np.flatnonzero(fold_of_row == k))
+        for k in range(n_splits)
+    ]
+    if any(len(test) == 0 for _, test in folds):
+        raise ValueError("A fold received no rows; use more groups or fewer folds.")
+    return folds
 
 
 def holdout_split(n, test_size=0.3, seed=42):

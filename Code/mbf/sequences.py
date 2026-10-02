@@ -6,6 +6,7 @@ Functions here act on single sequence strings and need neither PyTorch nor an en
 from __future__ import annotations
 
 import itertools
+import re
 
 import numpy as np
 import pandas as pd
@@ -79,13 +80,73 @@ _IUPAC = {
 }
 
 
-def scan_sequence_for_motifs(sequence, motifs=STABILITY_MOTIFS):
-    """Return (start, end, motif_name) for each consensus match, including overlaps."""
-    import re
+def iupac_to_regex(pattern):
+    """Convert an IUPAC consensus pattern to a regex on the DNA alphabet."""
+    return "".join(_IUPAC[b] for b in pattern.upper())
 
+
+def find_iupac_matches(sequence, iupac_pattern):
+    """Return all matching zero-based, end-exclusive spans, including overlaps."""
     seq = sequence.upper().replace("U", "T")
-    hits = []
-    for name, pattern in motifs.items():
-        regex = "".join(_IUPAC[b] for b in pattern.upper())
-        hits += [(m.start(), m.start() + len(pattern), name) for m in re.finditer(f"(?={regex})", seq)]
-    return hits
+    regex = iupac_to_regex(iupac_pattern)
+    length = len(iupac_pattern)
+    return [
+        (m.start(), m.start() + length)
+        for m in re.finditer(f"(?={regex})", seq)
+    ]
+
+
+def scan_sequence_for_motifs(sequence, motifs=STABILITY_MOTIFS):
+    """Return (start, end, motif_name) for each consensus match, including overlaps.
+
+    Spans are zero-based and end-exclusive; a match is a candidate annotation, not a
+    validated regulatory site.
+    """
+    return [
+        (start, end, name)
+        for name, pattern in motifs.items()
+        for start, end in find_iupac_matches(sequence, pattern)
+    ]
+
+
+# ---------------------------------------------------------------------------
+# Secondary-structure proxy
+# ---------------------------------------------------------------------------
+
+def can_pair(a, b):
+    """Return whether two uppercase bases form an allowed RNA or T-equivalent pair."""
+    pair = {a, b}
+    return pair in ({"A", "U"}, {"A", "T"}, {"G", "C"}, {"G", "U"}, {"G", "T"})
+
+
+def nussinov_pairing_fraction(seq, min_loop=3):
+    """Return the maximum paired-nucleotide fraction under noncrossing pairing.
+
+    Expect an uppercase sequence and a nonnegative integer min_loop.
+    Each pair must enclose at least min_loop sequence positions.
+    """
+    n = len(seq)
+    if n < min_loop + 2:
+        return 0.0
+
+    # Each entry covers the inclusive interval from i through j.
+    max_pairs = [[0] * n for _ in range(n)]
+    for span in range(min_loop + 1, n):
+        for i in range(0, n - span):
+            j = i + span
+
+            # First consider leaving position i unpaired.
+            best_pair_count = max_pairs[i + 1][j]
+
+            # Then consider eligible partners, enforcing the minimum separation.
+            for k in range(i + min_loop + 1, j + 1):
+                if can_pair(seq[i], seq[k]):
+                    inside_pairs = max_pairs[i + 1][k - 1] if k - 1 >= i + 1 else 0
+                    remaining_pairs = max_pairs[k + 1][j] if k + 1 <= j else 0
+                    candidate_pairs = inside_pairs + 1 + remaining_pairs
+                    if candidate_pairs > best_pair_count:
+                        best_pair_count = candidate_pairs
+
+            max_pairs[i][j] = best_pair_count
+
+    return (2 * max_pairs[0][n - 1]) / n

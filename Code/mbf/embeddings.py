@@ -12,7 +12,9 @@ import os
 import numpy as np
 import torch
 
+from .analysis import aggregate_attention, attention_motif_overlap, expand_token_attention_to_nucleotides
 from .encoders import encoder_input, free_memory, load_encoder
+from .sequences import scan_sequence_for_motifs
 
 
 @torch.no_grad()
@@ -96,23 +98,53 @@ def embed_all_layers(seq, encoder, tokenizer, model, device):
 
 
 @torch.no_grad()
-def nucleotide_attention(seq, encoder, tokenizer, model, device, layer=-1):
-    """Return last-layer incoming attention, min-max scaled, expanded to nucleotides.
+def attention_maps(text, tokenizer, model, device, max_len, layers=None):
+    """Return self-attention arrays and token strings for one input string.
 
-    Heads are averaged, each token's received attention is summed over queries, special
-    tokens are dropped, and each token's score is repeated over the nucleotides it spells.
+    Each array has shape (heads, query_tokens, key_tokens). layers selects which layers
+    to return, all by default; converting only the needed layers saves memory for long
+    inputs. The model must be loaded with eager attention so that it returns weights.
     """
-    inputs = tokenizer(
-        encoder_input(encoder, seq), return_tensors="pt", truncation=True, max_length=encoder.max_len
-    ).to(device)
+    inputs = tokenizer(text, return_tensors="pt", truncation=True, max_length=max_len).to(device)
     attentions = model(**inputs, output_attentions=True).attentions
-    layer_att = attentions[layer][0].float().mean(dim=0).cpu().numpy()
-    score = layer_att.sum(axis=0)
-    score = (score - score.min()) / (score.max() - score.min() + 1e-8)
-    tokens = tokenizer.convert_ids_to_tokens(inputs["input_ids"][0])
-    expanded = []
-    for s, tok in zip(score, tokens):
-        if tok.startswith("<") or tok.startswith("["):
-            continue
-        expanded.extend([s] * len(tok))
-    return np.array(expanded)
+    chosen = range(len(attentions)) if layers is None else layers
+    arrays = [attentions[i][0].float().cpu().numpy() for i in chosen]
+    return arrays, tokenizer.convert_ids_to_tokens(inputs["input_ids"][0])
+
+
+def nucleotide_attention(seq, encoder, tokenizer, model, device, layer=-1):
+    """Return one layer's incoming attention, min-max scaled and expanded to nucleotides."""
+    arrays, tokens = attention_maps(
+        encoder_input(encoder, seq), tokenizer, model, device, encoder.max_len, layers=[layer]
+    )
+    return expand_token_attention_to_nucleotides(aggregate_attention(arrays, layer=0), tokens)
+
+
+def embed_layers(encoder, seqs, device):
+    """Return one (n, d) matrix per hidden state for the given retained sequences.
+
+    The encoder is loaded, applied to each sequence with embed_all_layers, and released.
+    """
+    tokenizer, model = load_encoder(encoder, device)
+    per_sequence = [embed_all_layers(s, encoder, tokenizer, model, device) for s in seqs]
+    del model, tokenizer
+    free_memory()
+    return [np.vstack([states[k] for states in per_sequence]) for k in range(len(per_sequence[0]))]
+
+
+def attention_motif_tests(encoder, seqs, device, layer=-1):
+    """Run attention_motif_overlap on each sequence for one nucleotide encoder.
+
+    Returns the usable results (sequences with an available pooled comparison). The
+    encoder is loaded with eager attention and released afterwards.
+    """
+    tokenizer, model = load_encoder(encoder, device, eager_attention=True)
+    results = []
+    for seq in seqs:
+        attention = nucleotide_attention(seq, encoder, tokenizer, model, device, layer=layer)
+        result = attention_motif_overlap(attention, scan_sequence_for_motifs(seq))
+        if result is not None:
+            results.append(result)
+    del model, tokenizer
+    free_memory()
+    return results

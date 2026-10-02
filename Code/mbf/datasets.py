@@ -10,8 +10,9 @@ add a second setting.
 
 from __future__ import annotations
 
+import itertools
 import os
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 import numpy as np
 import pandas as pd
@@ -86,13 +87,16 @@ class Dataset:
     """The retained rows of one dataset, in input order.
 
     rows keeps the original file index and columns, so published splits and other
-    columns stay attached to each retained sequence.
+    columns stay attached to each retained sequence. n_sampled counts the rows before
+    filtering, and dropped counts the rows each filter removed.
     """
 
     spec: DatasetSpec
     rows: pd.DataFrame
     sequences: list[str]
     labels: np.ndarray
+    n_sampled: int = 0
+    dropped: dict = field(default_factory=dict)
 
     @property
     def groups(self):
@@ -111,18 +115,22 @@ class Dataset:
         return [encoder_input(encoder, s) for s in self.sequences]
 
 
-def load_dataset(key, n_rows=None, seed=42, data_dir="."):
-    """Load a registered dataset and keep the rows that pass the Stage 1 filters.
+def sample_rows(key, n_rows=None, seed=42, data_dir="."):
+    """Return a registered dataset's rows with a sequence, sampled before any filtering.
 
-    With n_rows, a random sample of that many rows is drawn with seed before filtering,
-    as in the Stage 1 notebooks; otherwise the whole file is used. data_dir is the
-    directory holding the files, the Code directory by default.
+    With n_rows, n_rows rows are drawn without replacement using seed; otherwise every
+    row is returned. data_dir is the directory holding the files, the Code directory by
+    default.
     """
     spec = DATASETS[key]
     df = pd.read_csv(os.path.join(data_dir, spec.path)).dropna(subset=[spec.sequence_column])
-    if n_rows is not None:
-        df = df.sample(n=n_rows, random_state=seed)
+    return df if n_rows is None else df.sample(n=n_rows, random_state=seed)
+
+
+def retain(spec, df):
+    """Apply the Stage 1 filters to sampled rows, keeping their order."""
     sequences = [str(value).strip().upper() for value in df[spec.sequence_column]]
+    in_frame = np.array([is_in_frame_and_starts_correctly(s) for s in sequences], dtype=bool)
     keep = np.array([is_retained(s) for s in sequences], dtype=bool)
     rows = df[keep]
     return Dataset(
@@ -130,4 +138,41 @@ def load_dataset(key, n_rows=None, seed=42, data_dir="."):
         rows=rows,
         sequences=[s for s, kept in zip(sequences, keep) if kept],
         labels=rows[spec.label_column].to_numpy(),
+        n_sampled=len(df),
+        dropped={
+            "failed the length or start check": int((~in_frame).sum()),
+            "translated to fewer than five amino acids": int((in_frame & ~keep).sum()),
+        },
     )
+
+
+def load_dataset(key, n_rows=None, seed=42, data_dir="."):
+    """Load a registered dataset, sample it, and keep the rows that pass the Stage 1 filters."""
+    return retain(DATASETS[key], sample_rows(key, n_rows, seed, data_dir))
+
+
+def audit(key, data_dir=".", length_limit=1000):
+    """Summarize properties of the whole file that matter for comparisons with published results.
+
+    Reports rows and distinct sequences, rows per published split and the distinct
+    sequences shared by each pair of splits, repeated sequences and how many carry
+    differing labels, the median label SD within a repeated sequence, and the share of
+    rows no longer than length_limit nucleotides.
+    """
+    spec = DATASETS[key]
+    df = pd.read_csv(os.path.join(data_dir, spec.path))
+    seqs = df[spec.sequence_column].astype(str).str.strip().str.upper()
+    summary = {"Rows": len(df), "Distinct sequences": seqs.nunique()}
+    if spec.split_column is not None:
+        splits = df[spec.split_column]
+        summary["Rows per split"] = splits.value_counts().to_dict()
+        sets = {name: set(seqs[splits == name]) for name in splits.unique()}
+        for a, b in itertools.combinations(sorted(sets), 2):
+            summary[f"Distinct sequences in both {a} and {b}"] = len(sets[a] & sets[b])
+    by_sequence = df.assign(seq=seqs).groupby("seq")[spec.label_column].agg(["count", "nunique", "std"])
+    repeated = by_sequence[by_sequence["count"] > 1]
+    summary["Repeated sequences"] = len(repeated)
+    summary["Repeated sequences with differing labels"] = int((repeated["nunique"] > 1).sum())
+    summary["Median label SD within a repeated sequence"] = repeated["std"].median()
+    summary[f"Share of rows with at most {length_limit:,} nucleotides"] = (seqs.str.len() <= length_limit).mean()
+    return pd.Series(summary, name=spec.label, dtype=object)
