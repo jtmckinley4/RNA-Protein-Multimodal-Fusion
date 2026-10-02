@@ -19,8 +19,7 @@ def grouped_folds(groups, n_splits=5, seed=42):
     A group's fold is the SHA-256 hash of the seed and its string, modulo n_splits, so the
     assignment is the same on every machine and library version, identical sequences
     always share a fold, and a sequence keeps its fold in any sample that contains it.
-    Stage1_refactor.ipynb defines the same function. These are the folds probe_scores
-    uses when it receives groups.
+    These are the folds probe_scores uses when it receives groups.
     """
     fold_of_row = np.array([
         int(hashlib.sha256(f"{seed}:{g}".encode()).hexdigest(), 16) % n_splits

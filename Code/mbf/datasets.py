@@ -63,25 +63,6 @@ def is_retained(seq):
     return is_in_frame_and_starts_correctly(seq) and len(translate_cds(seq)) >= 5
 
 
-def retained_rows(df, seq_col, label_col=None):
-    """Apply the Stage 1 filters and return (sequences, labels, lengths) in input order.
-
-    A row is kept when its length is a multiple of three, it starts with ATG or AUG,
-    and it translates to at least five amino acids. These are the filters used in
-    Stage1_refactor.ipynb, so the same sample yields the same retained rows.
-    """
-    seqs, labels = [], []
-    for _, row in df.iterrows():
-        seq = str(row[seq_col]).strip().upper()
-        if not is_retained(seq):
-            continue
-        seqs.append(seq)
-        if label_col is not None:
-            labels.append(row[label_col])
-    lengths = np.array([len(s) for s in seqs]).reshape(-1, 1)
-    return seqs, (np.array(labels) if label_col is not None else None), lengths
-
-
 @dataclass
 class Dataset:
     """The retained rows of one dataset, in input order.

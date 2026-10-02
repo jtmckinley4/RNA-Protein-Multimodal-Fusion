@@ -1,8 +1,7 @@
 """Representation analyses shared by the notebooks.
 
 Linear probes, representation similarity (CKA, mutual k-NN, CCA retrieval, RSA), the
-composition control, the attention-motif test, and summary tables and figures. The
-functions reproduce those defined inline in Stage1_refactor.ipynb.
+composition control, the attention-motif test, and summary tables and figures.
 """
 
 from __future__ import annotations
@@ -107,9 +106,9 @@ def mutual_knn_alignment(X, Y, k=10):
 def cca_retrieval(X_a, X_b, train_idx, test_idx, seed, n_pca=50, n_cca=10, ks=(1, 5, 10)):
     """Fit PCA then CCA on training rows; return held-out correlations and retrieval.
 
-    Matches the Stage1_refactor.ipynb procedure: PCA with 50 components per space, CCA
-    with 10 components, correlations of each component pair on the test rows, and
-    Recall@k for querying the second space with the first in the CCA space.
+    The procedure uses PCA with 50 components per space, CCA with 10 components,
+    correlations of each component pair on the test rows, and Recall@k for querying the
+    second space with the first in the CCA space.
     """
     n_pca = min(n_pca, len(train_idx) - 1, X_a.shape[1], X_b.shape[1])
     pca_a = PCA(n_components=n_pca, random_state=seed).fit(X_a[train_idx])
