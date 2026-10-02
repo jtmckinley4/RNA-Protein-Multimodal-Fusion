@@ -80,7 +80,7 @@ The main results from the saved run of [Stage1_analysis.ipynb](Code/Stage1_analy
 
 ### Next steps: published benchmarks and distinct modalities
 
-The remaining Stage 1 work compares against published fusion studies on the same inputs to define what alignment means. The saved run of [Stage1_analysis.ipynb](Code/Stage1_analysis.ipynb) covers Setting A below. Setting B needs a GTEx entry in the dataset registry, [datasets.py](Code/mbf/datasets.py), and notebook support for rows that carry separate DNA, transcript, and protein sequences. The Overleaf section "Next Step: Multiple Encoders per Modality and Published Benchmarks" holds the plan.
+The remaining Stage 1 work compares against published fusion studies on the same inputs to define what alignment means. The saved run of [Stage1_analysis.ipynb](Code/Stage1_analysis.ipynb) covers Setting A below. Setting B needs a GTEx entry in the dataset registry, [datasets.py](Code/mbf/datasets.py), and notebook support for rows that carry separate DNA, transcript, and protein sequences. The Overleaf section "Next Step: Published Benchmarks and Distinct Modalities" holds the plan.
 
 | Setting | Dataset | How DNA enters | Published comparison |
 | --- | --- | --- | --- |
