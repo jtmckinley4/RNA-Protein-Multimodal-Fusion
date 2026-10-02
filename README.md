@@ -6,7 +6,7 @@ A research project in the [Complex Adaptive Systems Laboratory](https://complexi
 
 The aim is to develop methods for choosing which biological modalities and pretrained models to combine, and for deciding when and how fusion is useful for a target task. The longer-term goal set with Mina Basirat is to fuse several pretrained encoders, with more than one model per modality (for example, several DNA, RNA, and protein models), and to compare those combinations. Those choices should be grounded in the biological question and the wet-lab work the predictions could inform. The [meeting slides](Notes/Mina_Meeting_Slides_2026-09-23.pptx), particularly slide 3, frame the contribution as a method for deciding whether and how to fuse.
 
-The current investigation uses one frozen encoder per modality to study DNA, RNA, and translated protein representations, beginning with mRNA stability prediction and a synonymous-recoding control. Frozen means that the encoder weights are not updated during these analyses. In [Stage1_refactor.ipynb](Code/Stage1_refactor.ipynb), Nucleotide Transformer 500M human-ref (pretrained on the human reference genome) reads each coding sequence in DNA letters, RNA-FM (pretrained on non-coding RNA) reads the same sequence in RNA letters, and ESM-2 35M reads its translation. The original [Stage1.ipynb](Code/Stage1.ipynb) compares only the Nucleotide Transformer and ESM-2 branches, and its `rna_*` variable names refer to the Nucleotide Transformer branch. This is an initial case study within the broader methodology; the choice of future tasks, model combinations, and evaluation criteria remains part of the research.
+Stage 1 studies DNA, RNA, and translated protein representations from frozen encoders, beginning with mRNA stability prediction and a synonymous-recoding control. Frozen means that the encoder weights are not updated during these analyses. In [Stage1_refactor.ipynb](Code/Stage1_refactor.ipynb), Nucleotide Transformer 500M human-ref (pretrained on the human reference genome) reads each coding sequence in DNA letters, RNA-FM (pretrained on non-coding RNA) reads the same sequence in RNA letters, and ESM-2 35M reads its translation. [Stage1_multimodel.ipynb](Code/Stage1_multimodel.ipynb) adds further encoders per modality on the same sample, and [Stage1_GTEx.ipynb](Code/Stage1_GTEx.ipynb) applies the analyses to IsoFormer's GTEx transcript-expression data, in which DNA is a distinct input. The choice of future tasks, model combinations, and evaluation criteria remains part of the research.
 
 ### Architecture priorities
 
@@ -34,9 +34,15 @@ Agents working in this repository should start with [AGENTS.md](AGENTS.md).
 
 ## Stage 1 analysis
 
-[Stage1.ipynb](Code/Stage1.ipynb) contains the original representation analysis. [Stage1_refactor.ipynb](Code/Stage1_refactor.ipynb) is the current Stage 1 notebook, with expanded explanations and an interpretation after each result. It runs every track on DNA, RNA, and protein embeddings of the same 981 retained sequences and compares the three modality pairs. Keep results associated with the notebook and version that produced them.
+Stage 1 consists of three notebooks. Keep results associated with the notebook and version that produced them.
 
-The notebooks contain analyses that:
+| Notebook | Scope | Contents |
+| --- | --- | --- |
+| [Stage1_refactor.ipynb](Code/Stage1_refactor.ipynb) | One encoder per modality on 981 retained mRNA stability sequences | Every analysis track, with explanations and an interpretation after each result |
+| [Stage1_multimodel.ipynb](Code/Stage1_multimodel.ipynb) | Eight encoders, two or three per modality, on the same stability sample | Every analysis track for all encoder pairs, using the shared functions in [stage1_utils.py](Code/stage1_utils.py) |
+| [Stage1_GTEx.ipynb](Code/Stage1_GTEx.ipynb) | The same encoders on IsoFormer's GTEx transcript-expression data | Outline of the planned analyses |
+
+[Stage1_refactor.ipynb](Code/Stage1_refactor.ipynb) contains analyses that:
 
 1. Check sequence length and start codons, translate nucleotide sequences, generate matched DNA, RNA, and protein embeddings, and audit the full stability file against the version used by BioLangFusion.
 2. Probe prediction from each representation separately and from concatenated embeddings, with sequence-feature controls.
@@ -70,7 +76,7 @@ The main results from [Stage1_refactor.ipynb](Code/Stage1_refactor.ipynb), with 
 
 ### Next steps: multiple encoders and published benchmarks
 
-Stage 1 now covers the DNA modality with one encoder per modality. The next work adds more than one encoder per modality and compares against published fusion studies on the same inputs to define what alignment means. The Overleaf section "Stage 1 Extension: Benchmarks and the DNA Modality" holds the plan; it will be implemented in a separate notebook.
+[Stage1_refactor.ipynb](Code/Stage1_refactor.ipynb) uses one encoder per modality. The remaining Stage 1 work adds more than one encoder per modality and compares against published fusion studies on the same inputs to define what alignment means. [Stage1_multimodel.ipynb](Code/Stage1_multimodel.ipynb) covers Setting A below and [Stage1_GTEx.ipynb](Code/Stage1_GTEx.ipynb) covers Setting B. The Overleaf section "Next Step: Multiple Encoders per Modality and Published Benchmarks" holds the plan.
 
 | Setting | Dataset | How DNA enters | Published comparison |
 | --- | --- | --- | --- |
@@ -79,7 +85,7 @@ Stage 1 now covers the DNA modality with one encoder per modality. The next work
 
 In Setting A all three inputs derive from one coding sequence, so differences between encoders come from pretraining corpora and tokenization rather than new biological information. The stability CSV has no gene or transcript identifiers, so genomic context around each gene is not available without a separate mapping step. Setting B supplies DNA that carries promoter and regulatory context absent from the protein.
 
-Candidate additional encoders are Nucleotide Transformer v2 100M multi-species (BioLangFusion's DNA encoder) and DNABERT-2 for DNA, mRNA-FM for RNA, and ESM-2 8M (BioLangFusion) and 150M (IsoFormer) for protein. Nucleotide Transformer v2 and DNABERT-2 load custom model code written for `transformers` 4, which needs small compatibility adjustments under `transformers` 5. Trained fusion architectures, including BioLangFusion's fusion heads and IsoFormer's cross-attention, need token-level embeddings and belong to the fusion stage.
+Candidate additional encoders are Nucleotide Transformer v2 100M multi-species (BioLangFusion's DNA encoder) and DNABERT-2 for DNA, mRNA-FM for RNA, and ESM-2 8M (BioLangFusion) and 150M (IsoFormer) for protein. Nucleotide Transformer v2 and DNABERT-2 load custom model code written for `transformers` 4; [stage1_utils.py](Code/stage1_utils.py) applies the small compatibility adjustments they need under `transformers` 5 and pins both to a fixed checkpoint revision. Trained fusion architectures, including BioLangFusion's fusion heads and IsoFormer's cross-attention, need token-level embeddings and belong to the fusion stage.
 
 ## Data
 
@@ -107,7 +113,8 @@ When code adds or changes an output, update this inventory and its handling. Add
 
 | Generated file | Producer | Purpose | Handling |
 | --- | --- | --- | --- |
-| `Code/stage1_main_embeddings.npz` | `Stage1.ipynb` and `Stage1_refactor.ipynb` | Snapshot of embeddings and labels; subsequent analyses use the in-memory arrays. `Stage1_refactor.ipynb` stores the keys `dna`, `rna` (RNA-FM), `protein`, and `labels`; `Stage1.ipynb` stores its Nucleotide Transformer embeddings under `rna`, with `protein` and `labels`. | Local and ignored; either notebook overwrites the same path. |
+| `Code/stage1_multimodel_embeddings/` | `Stage1_multimodel.ipynb` | One embedding matrix per encoder, saved with its checkpoint, revision, token limit, and a fingerprint of the input sequences. The notebook reuses a matrix only when all of these match. | Local and ignored; delete an encoder's file to recompute it. |
+| `Code/stage1_main_embeddings.npz` | `Stage1_refactor.ipynb` | Snapshot of embeddings and labels; subsequent analyses use the in-memory arrays. It stores the keys `dna`, `rna` (RNA-FM), `protein`, and `labels`. | Local and ignored; rerunning the notebook overwrites it. |
 
 ## Setup
 
@@ -116,14 +123,14 @@ When code adds or changes an output, update this inventory and its handling. Add
 Use your existing Python environment for the project. Install PyTorch using the [official installation selector](https://pytorch.org/get-started/locally/) for your operating system and CPU or CUDA configuration. Install the remaining notebook dependencies in that environment:
 
 ```sh
-python -m pip install numpy pandas scipy scikit-learn umap-learn matplotlib biopython "transformers==5.15.1" multimolecule ipykernel
+python -m pip install numpy pandas scipy scikit-learn umap-learn matplotlib biopython "transformers==5.15.1" multimolecule einops ipykernel
 ```
 
 Open notebooks with VS Code's Python and Jupyter extensions and [select the environment containing these packages as the kernel](https://code.visualstudio.com/docs/datascience/jupyter-kernel-management). Use `Code/` as the kernel's working directory because the notebooks use relative CSV and output paths.
 
-[Stage1_refactor.ipynb](Code/Stage1_refactor.ipynb) uses a CUDA GPU when available, then an Apple Silicon GPU through PyTorch's MPS backend, and otherwise the CPU. [Stage1.ipynb](Code/Stage1.ipynb) uses CUDA or the CPU. `multimolecule` provides RNA-FM. Version 0.2.1 imports with `transformers` 5.14.1 and 5.15.1 but not 5.16 or later, which is why `transformers` is pinned. If `import multimolecule` fails in an Anaconda environment with an older `datasets` or `huggingface_hub`, upgrade `datasets` and `fsspec` and reinstall `huggingface_hub`.
+[Stage1_refactor.ipynb](Code/Stage1_refactor.ipynb) uses a CUDA GPU when available, then an Apple Silicon GPU through PyTorch's MPS backend, and otherwise the CPU. `multimolecule` provides RNA-FM. Version 0.2.1 imports with `transformers` 5.14.1 and 5.15.1 but not 5.16 or later, which is why `transformers` is pinned. If `import multimolecule` fails in an Anaconda environment with an older `datasets` or `huggingface_hub`, upgrade `datasets` and `fsspec` and reinstall `huggingface_hub`.
 
-The first run of [Stage1_refactor.ipynb](Code/Stage1_refactor.ipynb) downloads `InstaDeepAI/nucleotide-transformer-500m-human-ref`, `multimolecule/rnafm`, and `facebook/esm2_t12_35M_UR50D`, unless they are already cached. Hugging Face normally stores these downloads in the [user's cache](https://huggingface.co/docs/transformers/installation#cache-directory); the notebooks do not configure the repository's `.model-cache/` directory.
+The first run of [Stage1_refactor.ipynb](Code/Stage1_refactor.ipynb) downloads `InstaDeepAI/nucleotide-transformer-500m-human-ref`, `multimolecule/rnafm`, and `facebook/esm2_t12_35M_UR50D`, unless they are already cached. [Stage1_multimodel.ipynb](Code/Stage1_multimodel.ipynb) also downloads Nucleotide Transformer v2 100M, DNABERT-2, mRNA-FM, and ESM-2 8M and 150M; DNABERT-2's model code requires `einops`. Hugging Face normally stores these downloads in the [user's cache](https://huggingface.co/docs/transformers/installation#cache-directory); the notebooks do not configure the repository's `.model-cache/` directory.
 
 This dependency list covers the imports in the Stage 1 notebooks. A fresh-environment run has not been verified, and the repository does not yet pin package versions or model revisions for reproducibility.
 
