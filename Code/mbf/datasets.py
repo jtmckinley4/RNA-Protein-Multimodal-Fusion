@@ -17,7 +17,8 @@ from dataclasses import dataclass, field
 import numpy as np
 import pandas as pd
 
-from .encoders import encoder_input
+from .encoders import encoder_input, protein_input
+from .sequences import dna_to_rna, rna_to_dna
 from .sequences import is_in_frame_and_starts_correctly, translate_cds
 
 
@@ -27,6 +28,14 @@ class DatasetSpec:
 
     path is relative to the Code directory. split_column names the column holding the
     published train, validation, and test assignment, when the file has one.
+
+    In the "derived" setting every encoder input comes from sequence_column, one coding
+    sequence. In the "distinct" setting, input_columns names separate columns: "dna"
+    (genomic DNA, read by DNA encoders), "transcript" (the full transcript, read by RNA
+    encoders with one token per nucleotide), "cds" (the coding sequence, read by codon
+    encoders and used for the sequence filters), and "protein". label_columns, when given,
+    holds several targets, such as expression in each tissue; group_column names the
+    column whose values must stay within one fold, such as the gene.
     """
 
     key: str
@@ -38,9 +47,24 @@ class DatasetSpec:
     setting: str
     split_column: str | None = None
     source: str = ""
+    label_columns: tuple = ()
+    group_column: str | None = None
+    input_columns: dict | None = None
 
 
 _CODONBERT = "CodonBERT fine-tuning benchmark, github.com/Sanofi-Public/CodonBERT"
+_ISOFORMER = (
+    "IsoFormer GTEx transcript expression, huggingface.co/datasets/InstaDeepAI/"
+    "multi_omics_transcript_expression; DNA windows from Ensembl GRCh38"
+)
+
+# The 30 tissues of IsoFormer's GTEx task, in the file's column order
+GTEX_TISSUES = (
+    "Adipose Tissue", "Adrenal Gland", "Bladder", "Blood", "Blood Vessel", "Brain", "Breast",
+    "Cervix Uteri", "Colon", "Esophagus", "Fallopian Tube", "Heart", "Kidney", "Liver", "Lung",
+    "Muscle", "Nerve", "Ovary", "Pancreas", "Pituitary", "Prostate", "Salivary Gland", "Skin",
+    "Small Intestine", "Spleen", "Stomach", "Testis", "Thyroid", "Uterus", "Vagina",
+)
 
 DATASETS = {
     d.key: d
@@ -50,6 +74,11 @@ DATASETS = {
         DatasetSpec("mrfp_expression", "mRFP expression (synonymous-recoding control)",
                     "mRFP_Expression.csv", "Sequence", "Value",
                     task="regression", setting="derived", split_column="Split", source=_CODONBERT),
+        DatasetSpec("gtex_pilot", "GTEx transcript expression, 2,000-transcript pilot", "GTEx_pilot.csv",
+                    "CDS", "", task="regression", setting="distinct", split_column="split",
+                    source=_ISOFORMER, label_columns=GTEX_TISSUES, group_column="gene_id",
+                    input_columns={"dna": "DNA", "transcript": "RNA", "cds": "CDS", "protein": "Protein",
+                                   "utr5": "5UTR", "utr3": "3UTR"}),
     ]
 }
 
@@ -81,8 +110,16 @@ class Dataset:
 
     @property
     def groups(self):
-        """Cross-validation groups: identical sequences share a group."""
+        """Cross-validation groups: the group column when the dataset has one, otherwise
+        the sequences, so that identical sequences share a group."""
+        if self.spec.group_column is not None:
+            return self.rows[self.spec.group_column].astype(str).tolist()
         return self.sequences
+
+    def column(self, name):
+        """Return one of the distinct-setting input columns as uppercase strings, "" when missing."""
+        values = self.rows[self.spec.input_columns[name]].fillna("")
+        return [str(v).strip().upper() for v in values]
 
     @property
     def lengths(self):
@@ -90,10 +127,20 @@ class Dataset:
         return np.array([len(s) for s in self.sequences]).reshape(-1, 1)
 
     def inputs_for(self, encoder):
-        """Return the string each retained row contributes to one encoder."""
-        if self.spec.setting != "derived":
-            raise NotImplementedError(f"inputs for the {self.spec.setting!r} setting")
-        return [encoder_input(encoder, s) for s in self.sequences]
+        """Return the string each retained row contributes to one encoder.
+
+        Derived setting: the coding sequence in the encoder's alphabet, or its translation.
+        Distinct setting: the genomic DNA for a DNA encoder, the coding sequence for a codon
+        encoder, the full transcript for any other RNA encoder, and the protein for a
+        protein encoder.
+        """
+        if self.spec.setting == "derived":
+            return [encoder_input(encoder, s) for s in self.sequences]
+        if encoder.modality == "DNA":
+            return [rna_to_dna(s) for s in self.column("dna")]
+        if encoder.modality == "RNA":
+            return [dna_to_rna(s) for s in self.column("cds" if encoder.codon else "transcript")]
+        return [protein_input(encoder, s) for s in self.column("protein")]
 
 
 def sample_rows(key, n_rows=None, seed=42, data_dir="."):
@@ -109,8 +156,11 @@ def sample_rows(key, n_rows=None, seed=42, data_dir="."):
 
 
 def retain(spec, df):
-    """Apply the Stage 1 filters to sampled rows, keeping their order."""
-    sequences = [str(value).strip().upper() for value in df[spec.sequence_column]]
+    """Apply the Stage 1 filters to sampled rows, keeping their order.
+
+    The filters act on sequence_column, the coding sequence in both settings.
+    """
+    sequences = [str(value).strip().upper() for value in df[spec.sequence_column].fillna("")]
     in_frame = np.array([is_in_frame_and_starts_correctly(s) for s in sequences], dtype=bool)
     keep = np.array([is_retained(s) for s in sequences], dtype=bool)
     rows = df[keep]
@@ -118,7 +168,7 @@ def retain(spec, df):
         spec=spec,
         rows=rows,
         sequences=[s for s, kept in zip(sequences, keep) if kept],
-        labels=rows[spec.label_column].to_numpy(),
+        labels=rows[list(spec.label_columns) if spec.label_columns else spec.label_column].to_numpy(),
         n_sampled=len(df),
         dropped={
             "failed the length or start check": int((~in_frame).sum()),
@@ -130,6 +180,24 @@ def retain(spec, df):
 def load_dataset(key, n_rows=None, seed=42, data_dir="."):
     """Load a registered dataset, sample it, and keep the rows that pass the Stage 1 filters."""
     return retain(DATASETS[key], sample_rows(key, n_rows, seed, data_dir))
+
+
+def official_split_sample(key, n_train, n_test, seed=42, data_dir="."):
+    """Sample rows from a dataset's published train and test splits and apply the filters.
+
+    Returns (train, test) Datasets. Each split is sampled before filtering, with n_train
+    or n_test rows drawn without replacement using seed, so the retained counts can be
+    slightly smaller. Use these for comparisons with published results on the same split.
+    """
+    spec = DATASETS[key]
+    if spec.split_column is None:
+        raise ValueError(f"{key} has no published split column")
+    df = sample_rows(key, data_dir=data_dir)
+    parts = []
+    for name, n in (("train", n_train), ("test", n_test)):
+        rows = df[df[spec.split_column] == name]
+        parts.append(retain(spec, rows.sample(n=min(n, len(rows)), random_state=seed)))
+    return tuple(parts)
 
 
 def audit(key, data_dir=".", length_limit=1000):

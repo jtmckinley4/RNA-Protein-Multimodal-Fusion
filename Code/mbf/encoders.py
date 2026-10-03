@@ -8,6 +8,7 @@ without them.
 from __future__ import annotations
 
 import gc
+import re
 from dataclasses import dataclass
 
 from .sequences import dna_to_rna, rna_to_dna, translate_cds
@@ -17,10 +18,16 @@ from .sequences import dna_to_rna, rna_to_dna, translate_cds
 class Encoder:
     """A frozen pretrained encoder and the input it reads.
 
-    alphabet: "dna" (U replaced by T), "rna" (T replaced by U), or "protein"
-    (translated coding sequence). loader: "auto" for checkpoints that load with
-    the Transformers auto classes, "remote_esm" for Nucleotide Transformer v2,
-    and "remote_dnabert2" for DNABERT-2.
+    alphabet: "dna" (U replaced by T), "rna" (T replaced by U), "protein" (translated
+    coding sequence), or "protein_spaced" (the translation with residues separated by
+    spaces and the rare amino acids U, Z, O, and B written as X, as ProtBERT expects).
+    loader: "auto" for checkpoints that load with the Transformers auto classes,
+    "remote_esm" for Nucleotide Transformer v2, "remote_dnabert2" for DNABERT-2, and
+    "bert" for ProtBERT, whose checkpoint does not name its model type.
+    attention: False when the model does not return attention weights (DNABERT-2's
+    model code, and HyenaDNA, which has no attention layers). codon: True when the
+    tokenizer reads one codon per token, so the encoder needs an in-frame coding sequence
+    when a dataset supplies a transcript and a coding sequence separately.
     """
 
     key: str
@@ -31,6 +38,8 @@ class Encoder:
     max_len: int
     loader: str = "auto"
     revision: str | None = None
+    attention: bool = True
+    codon: bool = False
 
 
 ENCODERS = {
@@ -43,14 +52,30 @@ ENCODERS = {
                 loader="remote_esm", revision="f34324c6fde36a4f635f0f1f06cac5d25acd6798"),
         Encoder("dnabert2", "DNABERT-2", "DNA",
                 "zhihan1996/DNABERT-2-117M", "dna", 1024,
-                loader="remote_dnabert2", revision="7bce263b15377fc15361f52cfab88f8b586abda0"),
+                loader="remote_dnabert2", revision="7bce263b15377fc15361f52cfab88f8b586abda0",
+                attention=False),
+        Encoder("hyenadna", "HyenaDNA large", "DNA", "multimolecule/hyenadna-large", "dna", 1_000_000,
+                revision="928e4a8cf67eab56be6e9c517b1a155faca0b1e1", attention=False),
         Encoder("rnafm", "RNA-FM", "RNA", "multimolecule/rnafm", "rna", 1024),
-        Encoder("mrnafm", "mRNA-FM", "RNA", "multimolecule/mrnafm", "rna", 1024),
+        Encoder("rinalmo", "RiNALMo 150M", "RNA", "multimolecule/rinalmo-mega", "rna", 1024,
+                revision="5e3a682eb856148fe81f12a25301962c9ffaf0ed"),
+        Encoder("mrnafm", "mRNA-FM", "RNA", "multimolecule/mrnafm", "rna", 1024, codon=True),
+        Encoder("calm", "CaLM", "RNA", "multimolecule/calm", "rna", 1026,
+                revision="63fb4125a6139353defa40cbdb0c2f5e76a8cc75", codon=True),
         Encoder("esm2_8m", "ESM-2 8M", "protein", "facebook/esm2_t6_8M_UR50D", "protein", 1024),
         Encoder("esm2_35m", "ESM-2 35M", "protein", "facebook/esm2_t12_35M_UR50D", "protein", 1024),
         Encoder("esm2_150m", "ESM-2 150M", "protein", "facebook/esm2_t30_150M_UR50D", "protein", 1024),
+        Encoder("protbert", "ProtBERT", "protein", "Rostlab/prot_bert", "protein_spaced", 1024,
+                loader="bert", revision="7a894481acdc12202f0a415dd567f6cfdb698908"),
     ]
 }
+
+
+def protein_input(encoder, protein):
+    """Return a protein sequence in the form a protein encoder reads."""
+    if encoder.alphabet == "protein_spaced":
+        return " ".join(re.sub(r"[UZOB]", "X", protein))
+    return protein
 
 
 def encoder_input(encoder, seq):
@@ -59,7 +84,7 @@ def encoder_input(encoder, seq):
         return rna_to_dna(seq)
     if encoder.alphabet == "rna":
         return dna_to_rna(seq)
-    return translate_cds(seq)
+    return protein_input(encoder, translate_cds(seq))
 
 
 # ---------------------------------------------------------------------------
@@ -191,10 +216,30 @@ def _load_remote_model(encoder):
     return model
 
 
+def load_tokenizer(encoder):
+    """Return an encoder's tokenizer without loading its model, for counting input tokens."""
+    import multimolecule  # noqa: F401  (registers the multimolecule tokenizers with Transformers)
+    from transformers import AutoTokenizer, BertTokenizer
+
+    if encoder.loader == "bert":
+        return BertTokenizer.from_pretrained(encoder.checkpoint, do_lower_case=False, revision=encoder.revision)
+    return AutoTokenizer.from_pretrained(encoder.checkpoint, trust_remote_code=True, revision=encoder.revision)
+
+
 def load_encoder(encoder, device, eager_attention=False):
     """Return (tokenizer, model) for an Encoder, on device and in evaluation mode."""
-    import multimolecule  # noqa: F401  (registers the RNA-FM and mRNA-FM classes with Transformers)
+    import multimolecule  # noqa: F401  (registers the RNA-FM, mRNA-FM, RiNALMo, CaLM, and HyenaDNA classes with Transformers)
     from transformers import AutoModel, AutoTokenizer
+
+    if encoder.loader == "bert":
+        from transformers import BertModel, BertTokenizer
+
+        tokenizer = BertTokenizer.from_pretrained(
+            encoder.checkpoint, do_lower_case=False, revision=encoder.revision
+        )
+        kwargs = {"attn_implementation": "eager"} if eager_attention else {}
+        model = BertModel.from_pretrained(encoder.checkpoint, revision=encoder.revision, **kwargs)
+        return tokenizer, model.to(device).eval()
 
     tokenizer = AutoTokenizer.from_pretrained(
         encoder.checkpoint, trust_remote_code=True, revision=encoder.revision

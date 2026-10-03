@@ -16,6 +16,9 @@ Claude outputs/
 # model cache
 .model-cache/
 
+# Downloaded source data for Code/build_gtex_pilot.py
+.data-cache/
+
 # Locally generated Stage 1 embeddings
 /Code/stage1_main_embeddings.npz
 /Code/stage1_multimodel_embeddings/

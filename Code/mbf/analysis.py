@@ -1,7 +1,8 @@
 """Representation analyses shared by the notebooks.
 
 Linear probes, representation similarity (CKA, mutual k-NN, CCA retrieval, RSA), the
-composition control, the attention-motif test, and summary tables and figures.
+composition control, principal-component bands, the attention-motif test and its
+permutation nulls, and summary tables and figures.
 """
 
 from __future__ import annotations
@@ -21,6 +22,7 @@ from sklearn.neighbors import NearestNeighbors
 from sklearn.pipeline import Pipeline
 from sklearn.preprocessing import StandardScaler
 
+from .sequences import scan_sequence_for_motifs
 from .splits import grouped_folds
 
 
@@ -31,9 +33,11 @@ from .splits import grouped_folds
 def probe_scores(X, y, groups=None, continuous=True, seed=42):
     """Return the five held-out fold scores of a standardized linear probe.
 
-    Continuous targets use RidgeCV over 20 log-spaced penalties and R^2. With `groups`
-    (the retained sequence strings), grouped_folds with this seed keeps identical
-    sequences in one fold; the default seed is the pinned assignment.
+    Continuous targets use RidgeCV over 20 log-spaced penalties and R^2. A target with
+    several columns is fit with one penalty for all columns and scored by R^2 averaged
+    over the columns. With `groups` (the retained sequence strings, or another group
+    label per row), grouped_folds with this seed keeps each group in one fold; the
+    default seed is the pinned assignment.
     """
     if continuous:
         model, scoring = RidgeCV(alphas=np.logspace(-3, 5, 20)), "r2"
@@ -61,9 +65,10 @@ def probe_assignment_means(X, y, groups, n_assignments=10, continuous=True):
 def probe_table(embeddings, targets, groups, n_assignments=10):
     """Return probe R^2 for every (embedding, target) combination.
 
-    embeddings: {name: matrix}; targets: {target name: vector}. For each target, the
-    table gives the mean and fold SD on the pinned folds, then the mean and SD of the
-    five-fold means over n_assignments further fold assignments (omitted when 0).
+    embeddings: {name: matrix}; targets: {target name: vector, or matrix with one
+    column per output}. For each target, the table gives the mean and fold SD on the
+    pinned folds, then the mean and SD of the five-fold means over n_assignments
+    further fold assignments (omitted when 0).
     """
     rows = []
     for name, X in embeddings.items():
@@ -78,6 +83,16 @@ def probe_table(embeddings, targets, groups, n_assignments=10):
                 row[f"{target} SD, {n_assignments} assignments"] = means.std()
         rows.append(row)
     return pd.DataFrame(rows).set_index("encoder")
+
+
+def fit_predict(X_train, y_train, X_test):
+    """Fit the standardized ridge probe on training rows and return its test predictions.
+
+    This is the probe of probe_scores, fit once on a given training set, for evaluations
+    on a fixed published split.
+    """
+    pipeline = Pipeline([("scale", StandardScaler()), ("model", RidgeCV(alphas=np.logspace(-3, 5, 20)))])
+    return pipeline.fit(X_train, y_train).predict(X_test)
 
 
 # ---------------------------------------------------------------------------
@@ -124,26 +139,26 @@ def cca_retrieval(X_a, X_b, train_idx, test_idx, seed, n_pca=50, n_cca=10, ks=(1
     return {"correlations": corrs, "recall": recall, "test_coords": (a_c, b_c)}
 
 
-def alignment_error_association(cca_a, cca_b, stability_labels, n_folds=5, seed=42):
+def alignment_error_association(cca_a, cca_b, labels, n_folds=5, seed=42):
     """Correlate sample-level CCA cosine similarity with out-of-fold error.
 
-    Inputs are matched CCA-projected rows of two modalities and their stability labels.
+    Inputs are matched CCA-projected rows of two modalities and one label per row.
     This exploratory rank association adapts the paper's motivation; it is
     not its across-model alignment-performance slope or an alignment-loss test.
     """
     # Compare paired rows in the existing CCA coordinate system.
     local_alignment = np.array([
         cosine_similarity(cca_a[i:i+1], cca_b[i:i+1])[0, 0]
-        for i in range(len(stability_labels))
+        for i in range(len(labels))
     ])
 
     # Fit ordinary linear regression and collect held-out absolute errors.
     fused = np.concatenate([cca_a, cca_b], axis=1)
     kf = KFold(n_splits=n_folds, shuffle=True, random_state=seed)
-    errors = np.zeros(len(stability_labels))
+    errors = np.zeros(len(labels))
     for train_idx, test_idx in kf.split(fused):
-        reg = LinearRegression().fit(fused[train_idx], stability_labels[train_idx])
-        errors[test_idx] = np.abs(reg.predict(fused[test_idx]) - stability_labels[test_idx])
+        reg = LinearRegression().fit(fused[train_idx], labels[train_idx])
+        errors[test_idx] = np.abs(reg.predict(fused[test_idx]) - labels[test_idx])
 
     rho, p_value = spearmanr(local_alignment, errors)
     return {"spearman": rho, "p_value": p_value}
@@ -231,6 +246,24 @@ def composition_share(X, X_residual):
 
 
 # ---------------------------------------------------------------------------
+# High- and low-variance directions
+# ---------------------------------------------------------------------------
+
+def pca_bands(X, k=10):
+    """Split an embedding into its top-k principal components and all remaining ones.
+
+    Returns (top scores, remaining scores, share of total variance in the top k). PCA is
+    fit on every row without labels. The two blocks are orthogonal and together keep all
+    of the embedding's variance, so a comparison computed on each block shows whether a
+    property lives in the few dominant directions or in the many low-variance ones.
+    """
+    n_components = min(X.shape[0] - 1, X.shape[1])
+    pca = PCA(n_components=n_components, svd_solver="full").fit(X)
+    scores = pca.transform(X)
+    return scores[:, :k], scores[:, k:], pca.explained_variance_ratio_[:k].sum()
+
+
+# ---------------------------------------------------------------------------
 # Attention at candidate motifs
 # ---------------------------------------------------------------------------
 
@@ -295,6 +328,80 @@ def attention_motif_overlap(attention_score, motif_hits):
         name: _test(positions) for name, positions in by_name.items()
     }
     return result
+
+
+def attention_motif_tests(profiles, seqs):
+    """Run attention_motif_overlap on each sequence's attention profile.
+
+    profiles holds one nucleotide-level attention array per sequence, in the order of
+    seqs. Returns the usable results (sequences with an available pooled comparison).
+    """
+    results = [attention_motif_overlap(a, scan_sequence_for_motifs(s)) for a, s in zip(profiles, seqs)]
+    return [r for r in results if r is not None]
+
+
+def _strata(seq, length, kind, bin_size):
+    """Label each covered position by its position bin or by its codon and reading frame."""
+    positions = np.arange(length)
+    if kind == "position":
+        return positions // bin_size
+    keys = [seq[3 * (p // 3): 3 * (p // 3) + 3] + str(p % 3) for p in positions]
+    return np.unique(keys, return_inverse=True)[1]
+
+
+def motif_permutation_test(profiles, seqs, motif=None, strata="position", n_permutations=500,
+                           bin_size=100, seed=42):
+    """Test whether attention at candidate matches exceeds a null that keeps position or codons.
+
+    For each sequence, the gap is the mean attention at positions covered by a match
+    (one pattern, or every pattern when motif is None) minus the mean elsewhere. The null
+    shuffles which positions count as matched, but only within strata: 100-nucleotide
+    position bins (strata="position"), or positions sharing a codon and reading frame
+    (strata="codon"). A position effect or a codon-composition effect therefore appears in
+    the null as well as in the observed gap. The test statistic is the gap averaged over
+    sequences, and p = (1 + null averages at least as large) / (n_permutations + 1).
+    """
+    rng = np.random.default_rng(seed)
+    prepared = []
+    for attention, seq in zip(profiles, seqs):
+        length = len(attention)
+        mask = np.zeros(length, dtype=bool)
+        for start, end, name in scan_sequence_for_motifs(seq):
+            if motif is None or name == motif:
+                mask[start:min(end, length)] = True
+        n_at = int(mask.sum())
+        if n_at == 0 or n_at == length:
+            continue
+        labels = _strata(seq, length, strata, bin_size)
+        order = np.argsort(labels, kind="stable")
+        prepared.append((np.asarray(attention, dtype=float), labels, mask[order], n_at, mask))
+    if not prepared:
+        return None
+
+    def mean_gap(masks):
+        gaps = []
+        for (attention, _, _, n_at, _), m in zip(prepared, masks):
+            at_sum = attention[m].sum()
+            gaps.append(at_sum / n_at - (attention.sum() - at_sum) / (len(attention) - n_at))
+        return np.mean(gaps)
+
+    observed = mean_gap([p[4] for p in prepared])
+    null = np.empty(n_permutations)
+    for r in range(n_permutations):
+        shuffled = []
+        for attention, labels, sorted_mask, _, _ in prepared:
+            order = np.lexsort((rng.random(len(attention)), labels))
+            m = np.empty(len(attention), dtype=bool)
+            m[order] = sorted_mask
+            shuffled.append(m)
+        null[r] = mean_gap(shuffled)
+    return {
+        "sequences": len(prepared),
+        "observed gap": observed,
+        "null gap": null.mean(),
+        "excess gap": observed - null.mean(),
+        "permutation p": (1 + (null >= observed).sum()) / (n_permutations + 1),
+    }
 
 
 def attention_summary(results_by_encoder, labels, motifs):

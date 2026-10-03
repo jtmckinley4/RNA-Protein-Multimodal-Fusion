@@ -66,6 +66,19 @@ def composition_features(seq):
     return [gc_content(dna), gc3_content(dna), np.log(len(dna))] + codon_freq + aa_freq
 
 
+def transcript_composition_features(dna, transcript, cds, utr5, utr3):
+    """Return composition_features of the coding sequence plus five whole-transcript features.
+
+    The additions are the GC fractions of the transcript and of the genomic DNA window,
+    the log transcript length, and log(1 + length) of each untranslated region, so that
+    the composition control also covers what lies outside the coding sequence.
+    """
+    return composition_features(cds) + [
+        gc_content(rna_to_dna(transcript)), gc_content(rna_to_dna(dna)), np.log(len(transcript)),
+        np.log1p(len(utr5)), np.log1p(len(utr3)),
+    ]
+
+
 # ---------------------------------------------------------------------------
 # Candidate stability motifs
 # ---------------------------------------------------------------------------

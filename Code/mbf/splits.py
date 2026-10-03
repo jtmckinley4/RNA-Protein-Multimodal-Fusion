@@ -10,7 +10,6 @@ import hashlib
 
 import numpy as np
 import pandas as pd
-from sklearn.model_selection import train_test_split
 
 
 def grouped_folds(groups, n_splits=5, seed=42):
@@ -34,13 +33,20 @@ def grouped_folds(groups, n_splits=5, seed=42):
     return folds
 
 
-def holdout_split(n, test_size=0.3, seed=42):
-    """Return (train, test) row indices for the CCA and retrieval analyses.
+def grouped_holdout_split(groups, test_fraction=0.3, seed=42):
+    """Return (train, test) row indices with every copy of a group on the same side.
 
-    This reproduces the Stage 1 split, which is random by row rather than grouped, so
-    copies of a duplicated sequence can fall on both sides.
+    A group goes to the test side when the SHA-256 hash of the seed and its string,
+    modulo 1,000, falls below test_fraction * 1,000. As with grouped_folds, the split is
+    the same on every machine, identical sequences never straddle it, and the test share
+    is close to, not exactly, test_fraction. The CCA and retrieval analyses use it.
     """
-    return train_test_split(np.arange(n), test_size=test_size, random_state=seed)
+    cutoff = round(test_fraction * 1000)
+    is_test = np.array([
+        int(hashlib.sha256(f"{seed}:holdout:{g}".encode()).hexdigest(), 16) % 1000 < cutoff
+        for g in groups
+    ])
+    return np.flatnonzero(~is_test), np.flatnonzero(is_test)
 
 
 def official_split(dataset):
